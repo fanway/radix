@@ -102,13 +102,15 @@ pub struct RadixTree<T> {
     edges: Arena<Edge>
 }
 
-impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
+impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T> {
     pub fn new() -> Self {
         let mut radix_tree = Self {
             nodes: Arena::<Node<T>>::new(),
             edges: Arena::<Edge>::new()
         };
-        let zero_node_idx = radix_tree.nodes.insert(Node::new(T::default()));
+        let mut zero_node = Node::new(T::default());
+        zero_node.is_leaf = false;
+        let zero_node_idx = radix_tree.nodes.insert(zero_node);
         radix_tree.edges.insert(Edge::new(zero_node_idx, "".to_string()));
         radix_tree
     }
@@ -126,7 +128,7 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
         let mut count = 0;
         let mut found = true;
         let mut node = &self.nodes[idx];
-        while found && !node.is_leaf && count < key.len() {
+        while found && !node.is_leaf && count <= key.len() {
             found = false;
             for &e_idx in &node.edges {
                 let edge = &self.edges[e_idx];
@@ -136,7 +138,8 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
                 //      "test"
                 //      /    \
                 //   "s"     "ing"
-                if key[count..].starts_with(&edge.label) {
+                if &edge.label != "" && key[count..].starts_with(&edge.label) {
+                    //println!("Key: {}, label: {}", &key[count..], &edge.label);
                     count += edge.label.len();
                     idx = e_idx;
                     found = true;
@@ -145,9 +148,12 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
                     // in a case when a label might be longer we need to consider to split the node
                     // if there is a common prefix > 0
                     if let Some(cp) = self.common_prefix(&key[count..], &edge.label) {
-                        println!("Key: {}, label: {}", &key[count..], &edge.label);
                         count += cp.len() + key.len();
                         idx = e_idx;
+                        break;
+                    } else if &edge.label == "" && count == key.len() {
+                        idx = e_idx;
+                        found = true;
                         break;
                     }
                 }
@@ -159,7 +165,7 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
         // if exact same key was found
         println!("{}, {}, {}, {}, {}, {}", idx, self.edges[idx].target_node, count, key.len(),
         self.nodes[self.edges[idx].target_node].is_leaf, found);
-        if count == key.len() {
+        if node.is_leaf && count == key.len() {
             return (Ans{exists:true, count}, idx);
         }
         (Ans{exists: false, count}, idx)
@@ -211,23 +217,30 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
         }
     }
 
+    /*
+    pub fn delete(&self, key: String) {
+        let (ans, idx) = lookup(key.clone());
+        if ans.exists {
+            let target_node_idx = self.edges[idx].target_node;
+
+
+    }
+    */
+
     pub fn insert(&mut self, key: String, val: T) {
-        if self.is_empty() {
-            let new_node = Node::new(val);
-            let new_node_idx = self.nodes.insert(new_node);
-            let new_edge = Edge::new(new_node_idx, key);
-            let new_edge_idx = self.edges.insert(new_edge);
-            self.nodes[0].edges.push(new_edge_idx);
-            self.nodes[0].is_leaf = false;
-            return
-        }
         let (ans, idx) = self.lookup(key.clone());
         let target_node_idx = self.edges[idx].target_node;
         if !ans.exists {
-            if ans.count <= key.len() {
+            if ans.count < key.len() {
                 // case when we have to add new node with suffix
                 let node_idx = self.nodes.insert(Node::new(val));
                 let edge_idx = self.edges.insert(Edge::new(node_idx,key[ans.count..].to_string()));
+                if self.nodes[target_node_idx].is_leaf {
+                    let node_idx = self.nodes.insert(Node::new(self.nodes[target_node_idx].value.clone()));
+                    self.nodes[target_node_idx].value = T::default();
+                    let edge_idx = self.edges.insert(Edge::new(node_idx, "".to_string()));
+                    self.nodes[target_node_idx].edges.push(edge_idx);
+                }
                 self.nodes[target_node_idx].edges.push(edge_idx);
                 self.nodes[target_node_idx].is_leaf = false;
             } else {
@@ -239,19 +252,14 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
                 let count = ans.count - key.len();
                 
                 self.edges[idx].label = key[..count].to_string();
-                let edge_left = Edge::new(self.edges[idx].target_node, label[count..].to_string());
+                let edge_left = Edge::new(target_node_idx, label[count..].to_string());
                 let edge_left_idx = self.edges.insert(edge_left);
-                if count == key.len() {
-                    split_node.edges.push(edge_left_idx);
-                    split_node.value = val;
-                } else {
-                    let new_node = Node::new(val);
-                    let new_node_idx = self.nodes.insert(new_node);
-                    let edge_right = Edge::new(new_node_idx, key[count..].to_string());
-                    let edge_right_idx = self.edges.insert(edge_right);
-                    split_node.edges.push(edge_left_idx);
-                    split_node.edges.push(edge_right_idx);
-                }
+                let new_node = Node::new(val);
+                let new_node_idx = self.nodes.insert(new_node);
+                let edge_right = Edge::new(new_node_idx, key[count..].to_string());
+                let edge_right_idx = self.edges.insert(edge_right);
+                split_node.edges.push(edge_left_idx);
+                split_node.edges.push(edge_right_idx);
                 let split_node_idx = self.nodes.insert(split_node);
                 self.edges[idx].target_node = split_node_idx;
             }

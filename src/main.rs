@@ -1,10 +1,6 @@
 mod trie;
 mod radix;
 
-use trie::TrieNode;
-use radix::*;
-use std::error::Error;
-
 fn main() {
     let mut radix_tree = radix::RadixTree::<String>::new(); 
     let vec = [("test", "test"), ("this", "this"), ("hashmap", "hashmap"), ("test1", "test1"), ("trie", "trie"), ("test12", "test12"), ("test123", "test123"), ("test21", "test21"), ("trie1", "trie1"), ("has", "has")];
