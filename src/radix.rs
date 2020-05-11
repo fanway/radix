@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::ops::{Index,IndexMut};
 use std::collections::VecDeque;
 
@@ -124,7 +123,6 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
 
     fn lookup(&self, key: String) -> (Ans, usize) {
         let mut idx = 0;
-        let mut edge_idx = 0;
         let mut count = 0;
         let mut found = true;
         let mut node = &self.nodes[idx];
@@ -243,12 +241,17 @@ impl<T: std::default::Default + std::fmt::Debug> RadixTree<T> {
                 self.edges[idx].label = key[..count].to_string();
                 let edge_left = Edge::new(self.edges[idx].target_node, label[count..].to_string());
                 let edge_left_idx = self.edges.insert(edge_left);
-                let new_node = Node::new(val);
-                let new_node_idx = self.nodes.insert(new_node);
-                let edge_right = Edge::new(new_node_idx, key[count..].to_string());
-                let edge_right_idx = self.edges.insert(edge_right);
-                split_node.edges.push(edge_left_idx);
-                split_node.edges.push(edge_right_idx);
+                if count == key.len() {
+                    split_node.edges.push(edge_left_idx);
+                    split_node.value = val;
+                } else {
+                    let new_node = Node::new(val);
+                    let new_node_idx = self.nodes.insert(new_node);
+                    let edge_right = Edge::new(new_node_idx, key[count..].to_string());
+                    let edge_right_idx = self.edges.insert(edge_right);
+                    split_node.edges.push(edge_left_idx);
+                    split_node.edges.push(edge_right_idx);
+                }
                 let split_node_idx = self.nodes.insert(split_node);
                 self.edges[idx].target_node = split_node_idx;
             }
