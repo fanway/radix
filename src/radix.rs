@@ -123,15 +123,28 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
         None
     }
 
-    fn lookup(&self, key: String) -> (Ans, usize) {
+    fn lookup(&mut self, key: String) -> (Ans, usize, usize) {
         let mut idx = 0;
+        let mut node_idx = 0;
+        let mut prev_node_idx = 0;
         let mut count = 0;
         let mut found = true;
-        let mut node = &self.nodes[idx];
-        while found && !node.is_leaf && count <= key.len() {
+        while found && !self.nodes[node_idx].is_leaf && count <= key.len() {
             found = false;
-            for &e_idx in &node.edges {
+            for e_idx in self.nodes[node_idx].edges.clone() {
+                {
+                    let target_node_idx = self.edges[e_idx].target_node;
+                    if self.nodes[target_node_idx].edges.len() == 1 {
+                        let compressed_edge = self.nodes[target_node_idx].edges[0];
+                        let label = self.edges[compressed_edge].label.clone();
+                        self.edges[e_idx].label = self.edges[e_idx].label.clone() + &label;
+                        self.nodes.delete(target_node_idx);
+                        self.edges[e_idx].target_node = self.edges[compressed_edge].target_node;
+                        self.edges.delete(compressed_edge);
+                    }
+                }
                 let edge = &self.edges[e_idx];
+                    
                 // if the label have a prefix of a suffix of the key
                 // example: looking for the word "testing" when we already
                 // have "test", "tests", "testing"
@@ -159,20 +172,21 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
                 }
             }
             if found {
-                node = &self.nodes[self.edges[idx].target_node];
+                prev_node_idx = node_idx;
+                node_idx = self.edges[idx].target_node;
             }
         }
         // if exact same key was found
         println!("{}, {}, {}, {}, {}, {}", idx, self.edges[idx].target_node, count, key.len(),
         self.nodes[self.edges[idx].target_node].is_leaf, found);
-        if node.is_leaf && count == key.len() {
-            return (Ans{exists:true, count}, idx);
+        if self.nodes[node_idx].is_leaf && count == key.len() {
+            return (Ans{exists:true, count}, idx, node_idx);
         }
-        (Ans{exists: false, count}, idx)
+        (Ans{exists: false, count}, idx, node_idx)
     }
 
-    pub fn find(&self, key: String) -> Option<&T> {
-        let (ans, idx) = self.lookup(key);
+    pub fn find(&mut self, key: String) -> Option<&T> {
+        let (ans, idx, _) = self.lookup(key);
         if ans.exists {
             return Some(&self.nodes[self.edges[idx].target_node].value);
         }
@@ -208,7 +222,8 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
             while level_size > 0 {
                 let n = q.pop_front().unwrap();
                 print!("{:#?}   ", self.edges[n].label);
-                for &edge in &self.nodes[self.edges[n].target_node].edges {
+                let test = self.edges[n].target_node;
+                for &edge in &self.nodes[test].edges {
                     q.push_back(edge);
                 }
                 level_size -= 1;
@@ -217,18 +232,21 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
         }
     }
 
-    /*
-    pub fn delete(&self, key: String) {
-        let (ans, idx) = lookup(key.clone());
+    pub fn delete(&mut self, key: String) {
+        let (ans, idx, node_idx) = self.lookup(key.clone());
         if ans.exists {
             let target_node_idx = self.edges[idx].target_node;
-
-
+            self.edges.delete(idx);
+            self.nodes.delete(target_node_idx);
+            for &e in self.nodes[node_idx].edges.iter() {
+                println!("test: {}", self.edges[e].label);
+            }
+            self.nodes[node_idx].edges.retain(|&x| x != idx);
+        }
     }
-    */
 
     pub fn insert(&mut self, key: String, val: T) {
-        let (ans, idx) = self.lookup(key.clone());
+        let (ans, idx, _) = self.lookup(key.clone());
         let target_node_idx = self.edges[idx].target_node;
         if !ans.exists {
             if ans.count < key.len() {

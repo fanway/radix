@@ -13,4 +13,6 @@ fn main() {
         assert_eq!(i.0, radix_tree.find(i.0.to_string()).unwrap());
     }
     println!("{}", radix_tree.find("this".to_string()).unwrap());
+    radix_tree.delete("trie".to_string());
+    radix_tree.print_edges();
 }
