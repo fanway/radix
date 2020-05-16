@@ -92,7 +92,7 @@ impl<T> Arena<T> {
     }
 
     fn delete(&mut self, idx: usize) {
-        self.arr.remove(idx);
+        //self.arr.remove(idx);
         self.arr_idx.push(idx);
     }
 }
@@ -134,6 +134,7 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
             for e_idx in self.nodes[node_idx].edges.clone() {
                 {
                     let target_node_idx = self.edges[e_idx].target_node;
+                    // lazy prefix compression
                     if self.nodes[target_node_idx].edges.len() == 1 {
                         let compressed_edge = self.nodes[target_node_idx].edges[0];
                         let label = self.edges[compressed_edge].label.clone();
@@ -144,7 +145,6 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
                     }
                 }
                 let edge = &self.edges[e_idx];
-                    
                 // if the label have a prefix of a suffix of the key
                 // example: looking for the word "testing" when we already
                 // have "test", "tests", "testing"
@@ -177,12 +177,12 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
             }
         }
         // if exact same key was found
-        println!("{}, {}, {}, {}, {}, {}", idx, self.edges[idx].target_node, count, key.len(),
-        self.nodes[self.edges[idx].target_node].is_leaf, found);
+        //println!("{}, {}, {}, {}, {}, {}", idx, self.edges[idx].target_node, count, key.len(),
+        //self.nodes[self.edges[idx].target_node].is_leaf, found);
         if self.nodes[node_idx].is_leaf && count == key.len() {
-            return (Ans{exists:true, count}, idx, node_idx);
+            return (Ans{exists:true, count}, idx, prev_node_idx);
         }
-        (Ans{exists: false, count}, idx, node_idx)
+        (Ans{exists: false, count}, idx, prev_node_idx)
     }
 
     pub fn find(&mut self, key: String) -> Option<&T> {
@@ -238,9 +238,6 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
             let target_node_idx = self.edges[idx].target_node;
             self.edges.delete(idx);
             self.nodes.delete(target_node_idx);
-            for &e in self.nodes[node_idx].edges.iter() {
-                println!("test: {}", self.edges[e].label);
-            }
             self.nodes[node_idx].edges.retain(|&x| x != idx);
         }
     }
@@ -252,7 +249,7 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
             if ans.count < key.len() {
                 // case when we have to add new node with suffix
                 let node_idx = self.nodes.insert(Node::new(val));
-                let edge_idx = self.edges.insert(Edge::new(node_idx,key[ans.count..].to_string()));
+                let edge_idx = self.edges.insert(Edge::new(node_idx, key[ans.count..].to_string()));
                 if self.nodes[target_node_idx].is_leaf {
                     let node_idx = self.nodes.insert(Node::new(self.nodes[target_node_idx].value.clone()));
                     self.nodes[target_node_idx].value = T::default();
