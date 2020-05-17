@@ -161,7 +161,9 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
                     // in a case when a label might be longer we need to consider to split the node
                     // if there is a common prefix > 0
                     if let Some(cp) = self.common_prefix(&key[count..], &edge.label) {
-                        count += cp.len() + key.len();
+                        println!("{}, {}", cp.len(), count);
+                        // TODO: make it more clear
+                        count += key.len();
                         idx = e_idx;
                         break;
                     } else if &edge.label == "" && count == key.len() {
@@ -265,13 +267,15 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
                 split_node.is_leaf = false;
                 let label = self.edges[idx].label.clone();
                 let count = ans.count - key.len();
+                let prefix_count = self.common_prefix(&key[count..], &self.edges[idx].label).unwrap().len();
+                println!("{}, {}", count, key[count..count+prefix_count].to_string());
                 
-                self.edges[idx].label = key[..count].to_string();
-                let edge_left = Edge::new(target_node_idx, label[count..].to_string());
+                self.edges[idx].label = key[count..count+prefix_count].to_string();
+                let edge_left = Edge::new(target_node_idx, label[prefix_count..].to_string());
                 let edge_left_idx = self.edges.insert(edge_left);
                 let new_node = Node::new(val);
                 let new_node_idx = self.nodes.insert(new_node);
-                let edge_right = Edge::new(new_node_idx, key[count..].to_string());
+                let edge_right = Edge::new(new_node_idx, key[count+prefix_count..].to_string());
                 let edge_right_idx = self.edges.insert(edge_right);
                 split_node.edges.push(edge_left_idx);
                 split_node.edges.push(edge_right_idx);

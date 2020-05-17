@@ -22,5 +22,5 @@ fn main() {
     radix_tree.print_edges();
     radix_tree.insert("trie".to_string(), "trie".to_string());
     radix_tree.print_edges();
-    radix_tree.print_nodes();
+    println!("{}", radix_tree.find("trie".to_string()).unwrap());
 }
