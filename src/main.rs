@@ -1,5 +1,6 @@
 mod trie;
 mod radix;
+mod art;
 
 fn main() {
     let mut radix_tree = radix::RadixTree::<String>::new(); 
