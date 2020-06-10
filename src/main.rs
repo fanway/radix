@@ -3,25 +3,9 @@ mod radix;
 mod art;
 
 fn main() {
-    let mut radix_tree = radix::RadixTree::<String>::new(); 
-    let vec = [("test", "test"), ("this", "this"), ("hashmap", "hashmap"), ("test1", "test1"), ("trie", "trie"), ("test12", "test12"), ("test123", "test123"), ("test21", "test21"), ("trie1", "trie1"), ("has", "has")];
-    for i in vec.iter() {
-        //println!("{:?}", i);
-        radix_tree.insert(i.0.to_string(), i.1.to_string());
-    }
-    radix_tree.print_edges();
-    println!("------------");
-    radix_tree.print_nodes();
-    for i in vec.iter() {
-        assert_eq!(i.0, radix_tree.find(i.0.to_string()).unwrap());
-    }
-    println!("{}", radix_tree.find("this".to_string()).unwrap());
-    radix_tree.delete("trie".to_string());
-    radix_tree.print_edges();
-    println!("------------");
-    println!("{}", radix_tree.find("trie1".to_string()).unwrap());
-    radix_tree.print_edges();
-    radix_tree.insert("trie".to_string(), "trie".to_string());
-    radix_tree.print_edges();
-    println!("{}", radix_tree.find("trie".to_string()).unwrap());
+    let mut art = art::Art::<u32>::new();
+    art.insert(10, 10);
+    art.insert(120, 20);
+    println!("{}", art.find(10).unwrap());
+    println!("{}", art.find(20).unwrap());
 }
