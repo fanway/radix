@@ -57,7 +57,7 @@ impl<T> Node4<T> {
     }
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
         let mut i: usize = 0;
-        while i < 3 && i > self.info.count {
+        while i < 3 && i < self.info.count {
             if key[depth] < self.key[i] {
                 break;
             }
@@ -161,6 +161,7 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
         let mut depth = 0;
         let mut iter_node = self.root;
         let mut parent_node = &mut self.root as *mut *mut Node<T>;
+        let new_leaf = Box::into_raw(Box::new(Node::Leaf(LeafNode::new(value.clone(), &key_bytes))));
         match unsafe {&*self.root} {
             Node::N4(_) => println!("N4"),
             Node::N16(_) => println!("N16"),
@@ -170,18 +171,31 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
             match unsafe {&mut *iter_node} {
                 Node::N4(node) => {
                     println!("first: {}", depth);
-                    depth += common_prefix(&node.key, &key_bytes);
-                    println!("{}", depth);
-                    if depth == key_bytes.len() {
-                        println!("test");
-                        let new_leaf = Node::Leaf(LeafNode::new(value.clone(), &key_bytes));
-                        node.add(Box::into_raw(Box::new(new_leaf)), &key_bytes, depth);
+                    let cm = common_prefix(&node.info.partial, &key_bytes);
+                    println!("{}, {:?}", node.info.partial_len, key_bytes);
+                    if cm != node.info.partial_len {
+                        println!("177: {:?}, {:?}, {}, {}", key_bytes, node.info.partial, depth, cm);
+                        let mut new_node = Node4::new(&node.info.partial[..cm]);
+                        new_node.add(new_leaf, &key_bytes, depth+cm);
+                        new_node.add(iter_node, &node.info.partial, cm);
+                        node.info.partial_len -= cm+1;
+                        for i in 0..node.info.partial_len {
+                            node.info.partial[i] = node.info.partial[cm+1+i];
+                        }
+                        //let new_node = Node::N4(new_node);
+                        unsafe {
+                            *parent_node = Box::into_raw(Box::new(Node::N4(new_node)));
+                        }
                         break;
                     }
+                    depth += cm;
                     parent_node = iter_node as *mut *mut Node<T>;
                     if let Some(n) = self.find_child(unsafe{&*iter_node}, key_bytes[depth]) {
                         iter_node = n;
                     } else {
+                        if let Node::N4(node) = unsafe {&mut *iter_node} {
+                            node.add(new_leaf, &key_bytes, depth);
+                        }
                         break;
                     }
                 }
@@ -192,10 +206,9 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     if depth == node.key.len() {
                         return
                     }
-                    let new_leaf = Node::Leaf(LeafNode::new(value.clone(), &key_bytes));
                     let mut new_node = Node4::new(&key_bytes[..depth]);
                     //node.key = node.key.to_vec();
-                    new_node.add(Box::into_raw(Box::new(new_leaf)), &key_bytes, depth);
+                    new_node.add(new_leaf, &key_bytes, depth);
                     println!("iter_node: {:?}", unsafe {&*iter_node});
                     new_node.add(iter_node, &node.key, depth);
                     unsafe {
