@@ -1,4 +1,5 @@
 use std::ptr;
+use rand::Rng;
 
 #[derive(Debug)]
 enum Node<T> {
@@ -217,6 +218,31 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     break;
                 }
             }
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+    #[test]
+    fn test_add_and_find() {
+		let mut art = Art::<u32>::new();
+		let mut data: Vec<[u32;2]> = vec![];
+		let mut rng = rand::thread_rng();
+
+		for _i in 0..100_000 {
+		    data.push([rng.gen::<u32>(), rng.gen::<u32>()]);
+        }
+
+        for elem in &data {
+            art.insert(elem[0], elem[1]);
+        }
+        
+        for elem in &data {
+            assert_eq!(elem[0], art.find(elem[1]).unwrap());
         }
     }
 }
