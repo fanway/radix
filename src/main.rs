@@ -1,6 +1,6 @@
-mod trie;
-mod radix;
 mod art;
+mod radix;
+mod trie;
 
 fn main() {
     let mut art = art::Art::<u32>::new();

@@ -1,5 +1,5 @@
-use std::ptr;
 use rand::Rng;
+use std::ptr;
 
 #[derive(Debug)]
 enum Node<T> {
@@ -8,36 +8,47 @@ enum Node<T> {
     Leaf(LeafNode<T>),
 }
 
+impl<T> Node<T> {
+    fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
+        match self {
+            Node::N4(n) => {
+                n.add(node, key, depth);
+            }
+            _ => (),
+        }
+    }
+}
+
 const MAX_PREFIX_LEN: usize = 10;
 
 #[derive(Debug)]
 struct Info {
     count: usize,
     partial: [u8; MAX_PREFIX_LEN],
-    partial_len: usize
+    partial_len: usize,
 }
 
 #[derive(Debug)]
 struct Node4<T> {
     key: [u8; 4],
     child_pointers: [*mut Node<T>; 4],
-    info: Info
+    info: Info,
 }
 
 #[derive(Debug)]
 struct Node16<T> {
     key: [u8; 16],
     child_pointers: [*mut Node<T>; 16],
-    info: Info
+    info: Info,
 }
 
 #[derive(Debug)]
 struct LeafNode<T> {
     key: Vec<u8>,
-    value: T
+    value: T,
 }
 
-fn transform(value: u32) -> [u8;4] {
+fn transform(value: u32) -> [u8; 4] {
     value.to_be_bytes()
 }
 
@@ -52,8 +63,8 @@ impl<T> Node4<T> {
             info: Info {
                 count: 0,
                 partial,
-                partial_len: min
-            }
+                partial_len: min,
+            },
         }
     }
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
@@ -65,8 +76,8 @@ impl<T> Node4<T> {
             i += 1;
         }
         if i != 3 && self.info.count != 0 {
-            self.key.swap(i+1, i);
-            self.child_pointers.swap(i+1, i);
+            self.key.swap(i + 1, i);
+            self.child_pointers.swap(i + 1, i);
         }
         self.info.count += 1;
         let min = std::cmp::min(key[..depth].len(), MAX_PREFIX_LEN);
@@ -83,23 +94,26 @@ impl<T> LeafNode<T> {
     fn new(value: T, key: &[u8]) -> Self {
         Self {
             value,
-            key: key.to_vec()
+            key: key.to_vec(),
         }
     }
 }
 
 fn common_prefix(key: &[u8], partial: &[u8]) -> usize {
-    key.iter().zip(partial.iter()).take_while(|&(a,b)| a == b).count()
+    key.iter()
+        .zip(partial.iter())
+        .take_while(|&(a, b)| a == b)
+        .count()
 }
 
 pub struct Art<T> {
-    root: *mut Node<T>
+    root: *mut Node<T>,
 }
 
 impl<T: Clone + std::fmt::Debug> Art<T> {
     pub fn new() -> Self {
         Self {
-            root: std::ptr::null_mut()
+            root: std::ptr::null_mut(),
         }
     }
 
@@ -108,30 +122,30 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
             Node::N4(node) => {
                 for i in 0..node.info.count as usize {
                     if key == node.key[i] {
-                        return Some(node.child_pointers[i])
+                        return Some(node.child_pointers[i]);
                     }
                 }
             }
             Node::N16(_) => (),
-            Node::Leaf(_) => ()
+            Node::Leaf(_) => (),
         }
         None
     }
 
     pub fn find(&self, key: u32) -> Option<T> {
         let mut iter_node = self.root;
-        println!("iter_node: {:?}", unsafe {&*iter_node});
+        println!("iter_node: {:?}", unsafe { &*iter_node });
         let key_bytes = key.to_be_bytes();
         let mut depth = 0;
         while !iter_node.is_null() {
-            match unsafe {&*iter_node} {
-                Node::N4(node) =>  {
+            match unsafe { &*iter_node } {
+                Node::N4(node) => {
                     depth += common_prefix(&node.info.partial[..node.info.partial_len], &key_bytes);
                     //println!("{:?}, {:?}", &node.info.partial[..node.info.partial_len], key_bytes);
                     println!("{:?}", node);
-                    println!("{:?}", unsafe {&*node.child_pointers[0]});
-                    println!("{:?}", unsafe {&*node.child_pointers[1]});
-                    if let Some(n) = self.find_child(unsafe {&*iter_node}, key_bytes[depth]) {
+                    println!("{:?}", unsafe { &*node.child_pointers[0] });
+                    println!("{:?}", unsafe { &*node.child_pointers[1] });
+                    if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
                         iter_node = n;
                     } else {
                         break;
@@ -142,9 +156,9 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     let cm = common_prefix(&node.key, &key_bytes);
                     println!("test: {}", cm);
                     if cm == node.key.len() {
-                        return Some(node.value.clone())
+                        return Some(node.value.clone());
                     } else {
-                        return None
+                        return None;
                     }
                 }
             }
@@ -152,36 +166,41 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
         None
     }
 
-
     pub fn insert(&mut self, value: T, key: u32) {
         let key_bytes = key.to_be_bytes();
         if self.root.is_null() {
             self.root = Box::into_raw(Box::new(Node::Leaf(LeafNode::new(value, &key_bytes))));
-            return
+            return;
         }
         let mut depth = 0;
         let mut iter_node = self.root;
         let mut parent_node = &mut self.root as *mut *mut Node<T>;
-        let new_leaf = Box::into_raw(Box::new(Node::Leaf(LeafNode::new(value.clone(), &key_bytes))));
-        match unsafe {&*self.root} {
+        let new_leaf = Box::into_raw(Box::new(Node::Leaf(LeafNode::new(
+            value.clone(),
+            &key_bytes,
+        ))));
+        match unsafe { &*self.root } {
             Node::N4(_) => println!("N4"),
             Node::N16(_) => println!("N16"),
-            Node::Leaf(_) => println!("Leaf")
+            Node::Leaf(_) => println!("Leaf"),
         }
         while !iter_node.is_null() {
-            match unsafe {&mut *iter_node} {
+            match unsafe { &mut *iter_node } {
                 Node::N4(node) => {
                     println!("first: {}", depth);
                     let cm = common_prefix(&node.info.partial, &key_bytes);
                     println!("{}, {:?}", node.info.partial_len, key_bytes);
                     if cm != node.info.partial_len {
-                        println!("177: {:?}, {:?}, {}, {}", key_bytes, node.info.partial, depth, cm);
+                        println!(
+                            "177: {:?}, {:?}, {}, {}",
+                            key_bytes, node.info.partial, depth, cm
+                        );
                         let mut new_node = Node4::new(&node.info.partial[..cm]);
-                        new_node.add(new_leaf, &key_bytes, depth+cm);
+                        new_node.add(new_leaf, &key_bytes, depth + cm);
                         new_node.add(iter_node, &node.info.partial, cm);
-                        node.info.partial_len -= cm+1;
+                        node.info.partial_len -= cm + 1;
                         for i in 0..node.info.partial_len {
-                            node.info.partial[i] = node.info.partial[cm+1+i];
+                            node.info.partial[i] = node.info.partial[cm + 1 + i];
                         }
                         //let new_node = Node::N4(new_node);
                         unsafe {
@@ -191,11 +210,11 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     }
                     depth += cm;
                     parent_node = iter_node as *mut *mut Node<T>;
-                    if let Some(n) = self.find_child(unsafe{&*iter_node}, key_bytes[depth]) {
+                    if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
                         iter_node = n;
                     } else {
-                        if let Node::N4(node) = unsafe {&mut *iter_node} {
-                            node.add(new_leaf, &key_bytes, depth);
+                        unsafe {
+                            (*iter_node).add(new_leaf, &key_bytes, depth);
                         }
                         break;
                     }
@@ -205,12 +224,12 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     depth += common_prefix(&node.key, &key_bytes);
                     println!("leaf: {}", depth);
                     if depth == node.key.len() {
-                        return
+                        return;
                     }
                     let mut new_node = Node4::new(&key_bytes[..depth]);
                     //node.key = node.key.to_vec();
                     new_node.add(new_leaf, &key_bytes, depth);
-                    println!("iter_node: {:?}", unsafe {&*iter_node});
+                    println!("iter_node: {:?}", unsafe { &*iter_node });
                     new_node.add(iter_node, &node.key, depth);
                     unsafe {
                         *parent_node = Box::into_raw(Box::new(Node::N4(new_node)));
@@ -222,25 +241,24 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-	use super::*;
+    use super::*;
 
     #[test]
     fn test_add_and_find() {
-		let mut art = Art::<u32>::new();
-		let mut data: Vec<[u32;2]> = vec![];
-		let mut rng = rand::thread_rng();
+        let mut art = Art::<u32>::new();
+        let mut data: Vec<[u32; 2]> = vec![];
+        let mut rng = rand::thread_rng();
 
-		for _i in 0..100_000 {
-		    data.push([rng.gen::<u32>(), rng.gen::<u32>()]);
+        for _i in 0..100_000 {
+            data.push([rng.gen::<u32>(), rng.gen::<u32>()]);
         }
 
         for elem in &data {
             art.insert(elem[0], elem[1]);
         }
-        
+
         for elem in &data {
             assert_eq!(elem[0], art.find(elem[1]).unwrap());
         }
