@@ -1,6 +1,11 @@
 use rand::Rng;
 use std::ptr;
 
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
 #[derive(Debug)]
 enum Node<T> {
     N4(Node4<T>),
@@ -87,6 +92,48 @@ impl<T> Node4<T> {
         }
         self.key[i] = key[depth];
         self.child_pointers[i] = node;
+    }
+}
+
+impl<T> Node16<T> {
+    fn new(prefix: &[u8]) -> Self {
+        let min = std::cmp::min(MAX_PREFIX_LEN, prefix.len());
+        let mut partial = [0; MAX_PREFIX_LEN];
+        partial[..min].copy_from_slice(prefix);
+        Self {
+            key: [0; 16],
+            child_pointers: [std::ptr::null_mut(); 16],
+            info: Info {
+                count: 0,
+                partial,
+                partial_len: min,
+            },
+        }
+    }
+
+    fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
+        let mask = (1 << self.info.count) - 1;
+        unsafe {
+            // Compare the key to all 16 stored keys
+            let cmp = _mm_cmplt_epi8(
+                _mm_set1_epi8(key[depth] as i8),
+                _mm_load_si128((&self.key).as_ptr() as *const __m128i),
+            );
+
+            // Use a mask to ignore children that don't exist
+            let bitfield = _mm_movemask_epi8(cmp) & mask;
+            let mut i: usize = 0;
+            if bitfield != 0 {
+                i = bitfield.trailing_zeros() as usize;
+                self.key.swap(i + 1, i);
+                self.child_pointers.swap(i + 1, i);
+            } else {
+                i = self.info.count;
+            }
+            self.key[i] = key[depth];
+            self.child_pointers[i] = node;
+            self.info.count += 1;
+        }
     }
 }
 
