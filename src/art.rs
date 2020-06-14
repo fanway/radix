@@ -10,6 +10,8 @@ use std::arch::x86_64::*;
 enum Node<T> {
     N4(Node4<T>),
     N16(Node16<T>),
+    N48(Node48<T>),
+    N256(Node256<T>),
     Leaf(LeafNode<T>),
 }
 
@@ -37,6 +39,38 @@ struct Node16<T> {
     child_pointers: [*mut Node<T>; 16],
     info: Info,
     key: [u8; 16],
+}
+
+#[repr(C)]
+struct Node48<T> {
+    child_pointers: [*mut Node<T>; 48],
+    key: [u8; 256],
+    info: Info,
+}
+
+impl<T> std::fmt::Debug for Node48<T> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("Node48")
+            .field("child_pointers", &&self.child_pointers[..])
+            .field("key", &&self.key[..])
+            .field("info", &self.info)
+            .finish()
+    }
+}
+
+#[repr(C)]
+struct Node256<T> {
+    child_pointers: [*mut Node<T>; 256],
+    info: Info,
+}
+
+impl<T> std::fmt::Debug for Node256<T> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("Node256")
+            .field("child_pointers", &&self.child_pointers[..])
+            .field("info", &self.info)
+            .finish()
+    }
 }
 
 #[repr(C)]
@@ -137,6 +171,67 @@ impl<T: std::fmt::Debug> Node16<T> {
     }
 }
 
+impl<T: std::fmt::Debug> Node48<T> {
+    fn new(prefix: &[u8]) -> Self {
+        let min = std::cmp::min(MAX_PREFIX_LEN, prefix.len());
+        let mut partial = [0; MAX_PREFIX_LEN];
+        partial[..min].copy_from_slice(prefix);
+        Self {
+            child_pointers: [std::ptr::null_mut(); 48],
+            info: Info {
+                count: 0,
+                partial,
+                partial_len: min,
+            },
+            key: [48; 256],
+        }
+    }
+
+    fn new_with_info(info: Info) -> Self {
+        Self {
+            child_pointers: [std::ptr::null_mut(); 48],
+            info,
+            key: [48; 256],
+        }
+    }
+
+    fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
+        let mut i = 0;
+        while !self.child_pointers[i].is_null() {
+            i += 1;
+        }
+        self.child_pointers[i] = node;
+        self.info.count += 1;
+    }
+}
+impl<T: std::fmt::Debug> Node256<T> {
+    fn new(prefix: &[u8]) -> Self {
+        let min = std::cmp::min(MAX_PREFIX_LEN, prefix.len());
+        let mut partial = [0; MAX_PREFIX_LEN];
+        partial[..min].copy_from_slice(prefix);
+        Self {
+            child_pointers: [std::ptr::null_mut(); 256],
+            info: Info {
+                count: 0,
+                partial,
+                partial_len: min,
+            },
+        }
+    }
+
+    fn new_with_info(info: Info) -> Self {
+        Self {
+            child_pointers: [std::ptr::null_mut(); 256],
+            info,
+        }
+    }
+
+    fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
+        self.info.count += 1;
+        self.child_pointers[self.info.count] = node;
+    }
+}
+
 impl<T> LeafNode<T> {
     fn new(value: T, key: &[u8]) -> Self {
         Self {
@@ -189,6 +284,18 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     return None;
                 }
             }
+            Node::N48(node) => {
+                if node.key[key as usize] != 48 {
+                    return Some(node.child_pointers[node.key[key as usize] as usize]);
+                }
+                return None;
+            }
+            Node::N256(node) => {
+                if !node.child_pointers[key as usize].is_null() {
+                    return Some(node.child_pointers[key as usize]);
+                }
+                return None;
+            }
             Node::Leaf(_) => (),
         }
         None
@@ -215,6 +322,22 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     }
                 }
                 Node::N16(node) => {
+                    depth += common_prefix(&node.info.partial[..node.info.partial_len], &key_bytes);
+                    if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
+                        iter_node = n;
+                    } else {
+                        break;
+                    }
+                }
+                Node::N48(node) => {
+                    depth += common_prefix(&node.info.partial[..node.info.partial_len], &key_bytes);
+                    if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
+                        iter_node = n;
+                    } else {
+                        break;
+                    }
+                }
+                Node::N256(node) => {
                     depth += common_prefix(&node.info.partial[..node.info.partial_len], &key_bytes);
                     if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
                         iter_node = n;
@@ -313,13 +436,99 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                         break;
                     }
                     depth += cm;
-                    parent_node = iter_node as *mut *mut Node<T>;
                     if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
+                        parent_node = &mut iter_node;
+                        iter_node = n;
+                    } else {
+                        if node.info.count < 16 {
+                            node.add(new_leaf, &key_bytes, depth);
+                        } else {
+                            unsafe {
+                                let mut new_node = Node48::new_with_info(node.info);
+                                ptr::copy_nonoverlapping(
+                                    (&node.child_pointers).as_ptr(),
+                                    (&mut new_node.child_pointers).as_mut_ptr(),
+                                    node.info.count,
+                                );
+                                for i in 0..node.info.count {
+                                    new_node.key[node.key[i] as usize] = i as u8;
+                                }
+                                new_node.add(new_leaf, &key_bytes, depth);
+                                ptr::drop_in_place(iter_node);
+                                *parent_node = Box::into_raw(Box::new(Node::N48(new_node)));
+                            }
+                        }
+                        break;
+                    }
+                }
+                Node::N48(node) => {
+                    let cm = common_prefix(&node.info.partial, &key_bytes);
+                    if cm != node.info.partial_len {
+                        let mut new_node = Node4::new(&node.info.partial[..cm]);
+                        new_node.add(new_leaf, &key_bytes, depth + cm);
+                        new_node.add(iter_node, &node.info.partial, cm);
+                        node.info.partial_len -= cm + 1;
+                        for i in 0..node.info.partial_len {
+                            node.info.partial[i] = node.info.partial[cm + 1 + i];
+                        }
+                        unsafe {
+                            *parent_node = Box::into_raw(Box::new(Node::N4(new_node)));
+                        }
+                        break;
+                    }
+                    depth += cm;
+                    if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
+                        parent_node = &mut iter_node;
+                        iter_node = n;
+                    } else {
+                        if node.info.count < 48 {
+                            //let mut i = 0;
+                            //while !node.child_pointers[i].is_null() {i+=1;}
+                            //node.child_pointers[i] = new_leaf;
+                            //node
+                            node.add(new_leaf, &key_bytes, depth);
+                        } else {
+                            let mut new_node = Node256::new_with_info(node.info);
+                            for i in 0..256 {
+                                if node.key[i] != 48 {
+                                    new_node.child_pointers[i] =
+                                        node.child_pointers[node.key[i] as usize];
+                                }
+                            }
+                            new_node.add(new_leaf, &key_bytes, depth);
+                            unsafe {
+                                ptr::drop_in_place(iter_node);
+                                *parent_node = Box::into_raw(Box::new(Node::N256(new_node)));
+                            }
+                        }
+                        break;
+                    }
+                }
+                Node::N256(node) => {
+                    let cm = common_prefix(&node.info.partial, &key_bytes);
+                    if cm != node.info.partial_len {
+                        let mut new_node = Node4::new(&node.info.partial[..cm]);
+                        new_node.add(new_leaf, &key_bytes, depth + cm);
+                        new_node.add(iter_node, &node.info.partial, cm);
+                        node.info.partial_len -= cm + 1;
+                        for i in 0..node.info.partial_len {
+                            node.info.partial[i] = node.info.partial[cm + 1 + i];
+                        }
+                        unsafe {
+                            *parent_node = Box::into_raw(Box::new(Node::N4(new_node)));
+                        }
+                        break;
+                    }
+                    depth += cm;
+                    if let Some(n) = self.find_child(unsafe { &*iter_node }, key_bytes[depth]) {
+                        parent_node = &mut iter_node;
                         iter_node = n;
                     } else {
                         node.add(new_leaf, &key_bytes, depth);
+                        break;
                     }
                 }
+
                 Node::Leaf(node) => {
                     depth += common_prefix(&node.key, &key_bytes);
                     if depth == node.key.len() {
