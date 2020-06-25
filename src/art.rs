@@ -6,12 +6,16 @@ use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
+trait ArtNode<T>: std::fmt::Debug {
+    fn new(&self, prefix: &[u8]) -> Box<dyn ArtNode<T>>;
+    fn new_with_info(&self, info: Info) -> Box<dyn ArtNode<T>>;
+    fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
+    fn find_child<'a>(&self, node: &'a mut Node<T>, key: u8) -> Option<&'a mut *mut Node<T>>;
+}
+
 #[derive(Debug)]
 enum Node<T> {
-    N4(Node4<T>),
-    N16(Node16<T>),
-    N48(Node48<T>),
-    N256(Node256<T>),
+    ArtNode(Box<dyn ArtNode<T>>),
     Leaf(LeafNode<T>),
 }
 
@@ -84,12 +88,12 @@ fn transform(value: u32) -> [u8; 4] {
     value.to_be_bytes()
 }
 
-impl<T> Node4<T> {
-    fn new(prefix: &[u8]) -> Self {
+impl<T: std::fmt::Debug> ArtNode<T> for Node4<T> {
+    fn new(&self, prefix: &[u8]) -> Box<dyn ArtNode<T>> {
         let min = std::cmp::min(MAX_PREFIX_LEN, prefix.len());
         let mut partial = [0; MAX_PREFIX_LEN];
         partial[..min].copy_from_slice(&prefix[..min]);
-        Self {
+        Box::new(Self {
             child_pointers: [std::ptr::null_mut(); 4],
             info: Info {
                 count: 0,
@@ -97,8 +101,17 @@ impl<T> Node4<T> {
                 partial_len: min,
             },
             key: [0; 4],
-        }
+        })
     }
+
+    fn new_with_info(&self, info: Info) -> Box<dyn ArtNode<T>> {
+        Box::new(Self {
+            child_pointers: [std::ptr::null_mut(); 4],
+            info,
+            key: [0; 4],
+        })
+    }
+
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
         let mut i: usize = 0;
         while i < 3 && i < self.info.count {
@@ -312,7 +325,6 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                         &node.info.partial[..node.info.partial_len],
                         &key_bytes[depth..],
                     );
-                    println!("{}", depth);
                     if let Some(n) = self.find_child(unsafe { &mut *iter_node }, key_bytes[depth]) {
                         iter_node = *n;
                     } else {
@@ -324,7 +336,6 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                         &node.info.partial[..node.info.partial_len],
                         &key_bytes[depth..],
                     );
-                    //println!("depth: {:?}, {}", unsafe { &*iter_node }, depth);
                     if let Some(n) = self.find_child(unsafe { &mut *iter_node }, key_bytes[depth]) {
                         iter_node = *n;
                     } else {
@@ -567,7 +578,6 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     new_node.add(new_leaf, &key_bytes, cm);
                     new_node.add(iter_node, &node.key, cm);
                     unsafe {
-                        //ptr::drop_in_place(parent_node);
                         *parent_node = Box::into_raw(Box::new(Node::N4(new_node)));
                     }
                     break;
