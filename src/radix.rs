@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 use std::ops::{Index,IndexMut};
+=======
+use rand::Rng;
+>>>>>>> Stashed changes
 use std::collections::VecDeque;
 
 
@@ -282,6 +286,35 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
                 let split_node_idx = self.nodes.insert(split_node);
                 self.edges[idx].target_node = split_node_idx;
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_add_and_find() {
+        let mut art = RadixTree::<u32>::new();
+        let mut data = std::collections::HashMap::new();
+        let mut rng = rand::thread_rng();
+
+        for _i in 0..100_000 {
+            data.insert(
+                rng.sample_iter(&rand::distributions::Alphanumeric)
+                    .take(1000)
+                    .collect::<String>(),
+                rng.gen::<u32>(),
+            );
+        }
+
+        for (elem0, elem1) in &data {
+            art.insert(elem0.clone(), elem1.clone());
+        }
+
+        for (elem0, elem1) in &data {
+            assert_eq!(elem1.clone(), *art.find(elem0.clone()).unwrap());
         }
     }
 }
