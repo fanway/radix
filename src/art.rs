@@ -559,7 +559,6 @@ impl<T: Clone + std::fmt::Debug> Art<T> {
                     if key_bytes.len() == cm {
                         println!("{:?}, {:?}, {:?}", value, node.value, key);
                         node.value = value;
-                        panic!();
                         break;
                     }
                     let mut new_node = Node4::new(&key_bytes[depth..cm]);
