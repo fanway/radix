@@ -9,7 +9,7 @@ use std::arch::x86_64::*;
 trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
     fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>>;
-    fn delete_child(&self, key: u8);
+    fn delete_child(&self, parent_node: *mut *mut Node<T>);
     fn prefix(&self, key: &[u8]) -> usize;
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
@@ -228,12 +228,12 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
     }
     fn delete_child(&self, parent_node: *mut *mut Node<T>) {
         let position = parent_node.offset_from((&self.child_pointers).as_ptr());
-        ptr::copy_nonoverlapping(
+        ptr::copy(
             (&self.key).as_ptr().offset(position + 1),
             (&mut self.key).as_mut_ptr().offset(position),
             self.info.count - 1 - position as usize,
         );
-        ptr::copy_nonoverlapping(
+        ptr::copy(
             (&self.child_pointers).as_ptr().offset(position + 1),
             (&mut self.child_pointers).as_mut_ptr().offset(position),
             self.info.count - 1 - position as usize,
@@ -384,6 +384,30 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
             cont = false;
         }
         cont
+    }
+    fn delete_child(&self, parent_node: *mut *mut Node<T>) {
+        let position = parent_node.offset_from((&self.child_pointers).as_ptr());
+        ptr::copy(
+            (&self.key).as_ptr().offset(position + 1),
+            (&mut self.key).as_mut_ptr().offset(position),
+            self.info.count - 1 - position as usize,
+        );
+        ptr::copy(
+            (&self.child_pointers).as_ptr().offset(position + 1),
+            (&mut self.child_pointers).as_mut_ptr().offset(position),
+            self.info.count - 1 - position as usize,
+        );
+        self.info.count -= 1;
+        if self.info.count == 3 {
+            let new_node = Node4::new_with_info(self.info);
+            ptr::copy_nonoverlapping((&self.key).as_ptr(), (&mut new_node.key).as_mut_ptr(), 4);
+            ptr::copy_nonoverlapping(
+                (&self.child_pointers).as_ptr(),
+                (&mut new_node.child_pointers).as_mut_ptr(),
+                4,
+            );
+            *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+        }
     }
 }
 
