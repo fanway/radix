@@ -1,4 +1,3 @@
-use rand::Rng;
 use std::ptr;
 
 #[cfg(target_arch = "x86")]
@@ -9,7 +8,7 @@ use std::arch::x86_64::*;
 trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
     fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>>;
-    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8);
+    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, key: u8);
     fn prefix(&self, key: &[u8]) -> usize;
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
@@ -226,47 +225,51 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         }
         cont
     }
-    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
-        let position = parent_node.offset_from((&self.child_pointers).as_ptr());
-        ptr::copy(
-            (&self.key).as_ptr().offset(position + 1),
-            (&mut self.key).as_mut_ptr().offset(position),
-            self.info.count - 1 - position as usize,
-        );
-        ptr::copy(
-            (&self.child_pointers).as_ptr().offset(position + 1),
-            (&mut self.child_pointers).as_mut_ptr().offset(position),
-            self.info.count - 1 - position as usize,
-        );
+    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, _key: u8) {
+        unsafe {
+            let position = parent_node.offset_from((&self.child_pointers).as_ptr());
+            ptr::copy(
+                (&self.key).as_ptr().offset(position + 1),
+                (&mut self.key).as_mut_ptr().offset(position),
+                self.info.count - 1 - position as usize,
+            );
+            ptr::copy(
+                (&self.child_pointers).as_ptr().offset(position + 1),
+                (&mut self.child_pointers).as_mut_ptr().offset(position),
+                self.info.count - 1 - position as usize,
+            );
+        }
         self.info.count -= 1;
         if self.info.count == 1 {
             let node = self.child_pointers[0];
-            if let Node::ArtNode(n) = unsafe { &*node } {
-                let prefix: usize = self.info.partial_len;
+            if let Node::ArtNode(n) = unsafe { &mut *node } {
+                let mut prefix: usize = self.info.partial_len;
                 if prefix < MAX_PREFIX_LEN {
                     self.info.partial[prefix] = self.key[0];
                     prefix += 1;
                 }
                 let info = n.info_mut();
-                if prefix < MAX_PREFIX_LEN {
-                    let sub_prefix = std::cmp::min(info.partial_len, MAX_PREFIX_LEN - prefix);
-                    ptr::copy_nonoverlapping(
-                        (&info.partial).as_ptr(),
-                        (&mut self.info.partial)
-                            .as_mut_ptr()
-                            .offset(prefix as isize),
-                        sub_prefix,
-                    );
-                    prefix += sub_prefix;
+                unsafe {
+                    if prefix < MAX_PREFIX_LEN {
+                        let sub_prefix = std::cmp::min(info.partial_len, MAX_PREFIX_LEN - prefix);
+                        ptr::copy_nonoverlapping(
+                            (&info.partial).as_ptr(),
+                            (&mut self.info.partial)
+                                .as_mut_ptr()
+                                .offset(prefix as isize),
+                            sub_prefix,
+                        );
+                        prefix += sub_prefix;
+                        ptr::copy_nonoverlapping(
+                            (&info.partial).as_ptr(),
+                            (&mut self.info.partial).as_mut_ptr(),
+                            std::cmp::min(prefix, MAX_PREFIX_LEN),
+                        );
+                        info.partial_len += prefix + 1;
+                    }
+                    *parent_node = node;
                 }
-                ptr::copy_nonoverlapping(
-                    (&info.partial).as_ptr(),
-                    (&mut self.info.partial).as_mut_ptr(),
-                    std::cmp::min(prefix, MAX_PREFIX_LEN),
-                );
-                info.partial_len += prefix + 1;
             }
-            *parent_node = node;
         }
     }
 }
@@ -385,28 +388,32 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         }
         cont
     }
-    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
-        let position = parent_node.offset_from((&self.child_pointers).as_ptr());
-        ptr::copy(
-            (&self.key).as_ptr().offset(position + 1),
-            (&mut self.key).as_mut_ptr().offset(position),
-            self.info.count - 1 - position as usize,
-        );
-        ptr::copy(
-            (&self.child_pointers).as_ptr().offset(position + 1),
-            (&mut self.child_pointers).as_mut_ptr().offset(position),
-            self.info.count - 1 - position as usize,
-        );
+    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, _key: u8) {
+        unsafe {
+            let position = parent_node.offset_from((&self.child_pointers).as_ptr());
+            ptr::copy(
+                (&self.key).as_ptr().offset(position + 1),
+                (&mut self.key).as_mut_ptr().offset(position),
+                self.info.count - 1 - position as usize,
+            );
+            ptr::copy(
+                (&self.child_pointers).as_ptr().offset(position + 1),
+                (&mut self.child_pointers).as_mut_ptr().offset(position),
+                self.info.count - 1 - position as usize,
+            );
+        }
         self.info.count -= 1;
         if self.info.count == 3 {
-            let new_node = Node4::new_with_info(self.info);
-            ptr::copy_nonoverlapping((&self.key).as_ptr(), (&mut new_node.key).as_mut_ptr(), 4);
-            ptr::copy_nonoverlapping(
-                (&self.child_pointers).as_ptr(),
-                (&mut new_node.child_pointers).as_mut_ptr(),
-                4,
-            );
-            *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+            let mut new_node = Node4::new_with_info(self.info);
+            unsafe {
+                ptr::copy_nonoverlapping((&self.key).as_ptr(), (&mut new_node.key).as_mut_ptr(), 4);
+                ptr::copy_nonoverlapping(
+                    (&self.child_pointers).as_ptr(),
+                    (&mut new_node.child_pointers).as_mut_ptr(),
+                    4,
+                );
+                *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+            }
         }
     }
 }
@@ -498,15 +505,15 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         }
         cont
     }
-    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
-        let position = self.key[key as usize];
+    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, key: u8) {
+        let mut position = self.key[key as usize];
         self.key[key as usize] = 48;
-        self.child_pointers[key as usize] = ptr::null_mut();
+        self.child_pointers[position as usize] = ptr::null_mut();
         self.info.count -= 1;
 
         if self.info.count == 12 {
-            let new_node = Node16::new_with_info(self.info);
-            let count = 0;
+            let mut new_node = Node16::new_with_info(self.info);
+            let mut count = 0;
             for i in 0..256 {
                 position = self.key[i];
                 if position != 48 {
@@ -515,7 +522,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
                     count += 1;
                 }
             }
-            *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+            unsafe {
+                *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+            }
         }
     }
 }
@@ -586,13 +595,13 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
         }
         cont
     }
-    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
+    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, key: u8) {
         self.child_pointers[key as usize] = ptr::null_mut();
         self.info.count -= 1;
 
         if self.info.count == 35 {
-            let new_node = Node48::new_with_info(self.info);
-            let position = 0;
+            let mut new_node = Node48::new_with_info(self.info);
+            let mut position = 0;
             for i in 0..256 {
                 if !self.child_pointers[i].is_null() {
                     new_node.child_pointers[position] = self.child_pointers[i];
@@ -600,7 +609,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
                     position += 1;
                 }
             }
-            *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+            unsafe {
+                *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+            }
         }
     }
 }
@@ -632,7 +643,7 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
         }
     }
 
-    pub fn delete(&self, key: u32) {
+    pub fn delete(&mut self, key: u32) {
         let key_bytes = key.to_be_bytes();
         let mut ref_node = &mut self.root as *mut *mut Node<T>;
         let mut parent_node = self.root;
@@ -656,7 +667,10 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
                     depth += common_prefix(&node.key[depth..], &key_bytes[depth..]);
                     if depth == node.key.len() {
                         unsafe {
-                            (*parent_node).delete_child(ref_node, key);
+                            match &mut *parent_node {
+                                Node::ArtNode(node) => node.delete_child(ref_node, key),
+                                Node::Leaf(_) => (),
+                            }
                             ptr::drop_in_place(iter_node);
                             *ref_node = ptr::null_mut();
                         }
@@ -726,7 +740,6 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
                 }
                 Node::Leaf(node) => {
                     let cm = depth + common_prefix(&node.key[depth..], &key_bytes[depth..]);
-                    let len = node.key.len();
                     println!(
                         "{:?}, {:?}, {:?}",
                         &key_bytes[depth..cm],

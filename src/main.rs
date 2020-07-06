@@ -1,3 +1,4 @@
+#![feature(ptr_offset_from)]
 mod art;
 mod radix;
 mod trie;
@@ -16,6 +17,7 @@ fn main() {
     art.insert(50, 960);
     println!("six insert ---------------------");
     art.insert(300, 1920);
+    art.delete(300);
     println!("seventh insert ---------------------");
     art.insert(301, 3840);
     println!("first find ---------------------");
@@ -28,8 +30,6 @@ fn main() {
     println!("{}", art.find(40).unwrap());
     println!("fifth find ---------------------");
     println!("{}", art.find(50).unwrap());
-    println!("six find ---------------------");
-    println!("{}", art.find(300).unwrap());
     println!("seventh find ---------------------");
     println!("{}", art.find(301).unwrap());
 }
