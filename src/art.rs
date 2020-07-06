@@ -498,6 +498,25 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         }
         cont
     }
+    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
+        let position = self.key[key as usize];
+        self.key[key as usize] = 48;
+        self.child_pointers[key as usize] = ptr::null_mut();
+        self.info.count -= 1;
+
+        if self.info.count == 12 {
+            let new_node = Node16::new_with_info(self.info);
+            let count = 0;
+            for i in 0..256 {
+                position = self.key[i];
+                if position != 48 {
+                    new_node.key[count] = i as u8;
+                    new_node.child_pointers[count] = self.child_pointers[position as usize];
+                    count += 1;
+                }
+            }
+        }
+    }
 }
 
 impl<T> Node256<T> {
