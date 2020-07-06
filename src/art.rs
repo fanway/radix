@@ -9,7 +9,7 @@ use std::arch::x86_64::*;
 trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
     fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>>;
-    fn delete_child(&self, parent_node: *mut *mut Node<T>);
+    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8);
     fn prefix(&self, key: &[u8]) -> usize;
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
@@ -601,11 +601,13 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
         let mut parent_node = self.root;
         let mut iter_node = self.root;
         let mut depth = 0;
+        let mut key = 0;
         while !iter_node.is_null() {
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
                     depth += node.prefix(&key_bytes[depth..]);
                     if let Some(n) = node.find_child(key_bytes[depth]) {
+                        key = key_bytes[depth];
                         ref_node = n;
                         parent_node = iter_node;
                         iter_node = *n;
