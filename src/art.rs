@@ -226,7 +226,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         }
         cont
     }
-    fn delete_child(&self, parent_node: *mut *mut Node<T>) {
+    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
         let position = parent_node.offset_from((&self.child_pointers).as_ptr());
         ptr::copy(
             (&self.key).as_ptr().offset(position + 1),
@@ -385,7 +385,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         }
         cont
     }
-    fn delete_child(&self, parent_node: *mut *mut Node<T>) {
+    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
         let position = parent_node.offset_from((&self.child_pointers).as_ptr());
         ptr::copy(
             (&self.key).as_ptr().offset(position + 1),
@@ -619,7 +619,7 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
                     depth += common_prefix(&node.key[depth..], &key_bytes[depth..]);
                     if depth == node.key.len() {
                         unsafe {
-                            (*parent_node).delete_child(ref_node);
+                            (*parent_node).delete_child(ref_node, key);
                             ptr::drop_in_place(iter_node);
                             *ref_node = ptr::null_mut();
                         }
