@@ -515,6 +515,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
                     count += 1;
                 }
             }
+            *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
         }
     }
 }
@@ -584,6 +585,23 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
             cont = false;
         }
         cont
+    }
+    fn delete_child(&self, parent_node: *mut *mut Node<T>, key: u8) {
+        self.child_pointers[key as usize] = ptr::null_mut();
+        self.info.count -= 1;
+
+        if self.info.count == 35 {
+            let new_node = Node48::new_with_info(self.info);
+            let position = 0;
+            for i in 0..256 {
+                if !self.child_pointers[i].is_null() {
+                    new_node.child_pointers[position] = self.child_pointers[i];
+                    new_node.key[i] = position as u8;
+                    position += 1;
+                }
+            }
+            *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
+        }
     }
 }
 
