@@ -9,6 +9,7 @@ use std::arch::x86_64::*;
 trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
     fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>>;
+    fn delete_child(&self, key: u8);
     fn prefix(&self, key: &[u8]) -> usize;
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
@@ -224,6 +225,49 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
             cont = false;
         }
         cont
+    }
+    fn delete_child(&self, parent_node: *mut *mut Node<T>) {
+        let position = parent_node.offset_from((&self.child_pointers).as_ptr());
+        ptr::copy_nonoverlapping(
+            (&self.key).as_ptr().offset(position + 1),
+            (&mut self.key).as_mut_ptr().offset(position),
+            self.info.count - 1 - position as usize,
+        );
+        ptr::copy_nonoverlapping(
+            (&self.child_pointers).as_ptr().offset(position + 1),
+            (&mut self.child_pointers).as_mut_ptr().offset(position),
+            self.info.count - 1 - position as usize,
+        );
+        self.info.count -= 1;
+        if self.info.count == 1 {
+            let node = self.child_pointers[0];
+            if let Node::ArtNode(n) = unsafe { &*node } {
+                let prefix: usize = self.info.partial_len;
+                if prefix < MAX_PREFIX_LEN {
+                    self.info.partial[prefix] = self.key[0];
+                    prefix += 1;
+                }
+                let info = n.info_mut();
+                if prefix < MAX_PREFIX_LEN {
+                    let sub_prefix = std::cmp::min(info.partial_len, MAX_PREFIX_LEN - prefix);
+                    ptr::copy_nonoverlapping(
+                        (&info.partial).as_ptr(),
+                        (&mut self.info.partial)
+                            .as_mut_ptr()
+                            .offset(prefix as isize),
+                        sub_prefix,
+                    );
+                    prefix += sub_prefix;
+                }
+                ptr::copy_nonoverlapping(
+                    (&info.partial).as_ptr(),
+                    (&mut self.info.partial).as_mut_ptr(),
+                    std::cmp::min(prefix, MAX_PREFIX_LEN),
+                );
+                info.partial_len += prefix + 1;
+            }
+            *parent_node = node;
+        }
     }
 }
 
@@ -524,6 +568,39 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
     pub fn new() -> Self {
         Self {
             root: std::ptr::null_mut(),
+        }
+    }
+
+    pub fn delete(&self, key: u32) {
+        let key_bytes = key.to_be_bytes();
+        let mut ref_node = &mut self.root as *mut *mut Node<T>;
+        let mut parent_node = self.root;
+        let mut iter_node = self.root;
+        let mut depth = 0;
+        while !iter_node.is_null() {
+            match unsafe { &mut *iter_node } {
+                Node::ArtNode(node) => {
+                    depth += node.prefix(&key_bytes[depth..]);
+                    if let Some(n) = node.find_child(key_bytes[depth]) {
+                        ref_node = n;
+                        parent_node = iter_node;
+                        iter_node = *n;
+                    } else {
+                        break;
+                    }
+                }
+                Node::Leaf(node) => {
+                    depth += common_prefix(&node.key[depth..], &key_bytes[depth..]);
+                    if depth == node.key.len() {
+                        unsafe {
+                            (*parent_node).delete_child(ref_node);
+                            ptr::drop_in_place(iter_node);
+                            *ref_node = ptr::null_mut();
+                        }
+                    }
+                    break;
+                }
+            }
         }
     }
 
