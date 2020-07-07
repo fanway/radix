@@ -1,27 +1,35 @@
-mod trie;
-mod radix;
+#![feature(ptr_offset_from)]
 mod art;
+mod radix;
+mod trie;
 
 fn main() {
-    let mut radix_tree = radix::RadixTree::<String>::new(); 
-    let vec = [("test", "test"), ("this", "this"), ("hashmap", "hashmap"), ("test1", "test1"), ("trie", "trie"), ("test12", "test12"), ("test123", "test123"), ("test21", "test21"), ("trie1", "trie1"), ("has", "has")];
-    for i in vec.iter() {
-        //println!("{:?}", i);
-        radix_tree.insert(i.0.to_string(), i.1.to_string());
-    }
-    radix_tree.print_edges();
-    println!("------------");
-    radix_tree.print_nodes();
-    for i in vec.iter() {
-        assert_eq!(i.0, radix_tree.find(i.0.to_string()).unwrap());
-    }
-    println!("{}", radix_tree.find("this".to_string()).unwrap());
-    radix_tree.delete("trie".to_string());
-    radix_tree.print_edges();
-    println!("------------");
-    println!("{}", radix_tree.find("trie1".to_string()).unwrap());
-    radix_tree.print_edges();
-    radix_tree.insert("trie".to_string(), "trie".to_string());
-    radix_tree.print_edges();
-    println!("{}", radix_tree.find("trie".to_string()).unwrap());
+    let mut art = art::Art::<u32, u32>::new();
+    println!("first insert ---------------------");
+    art.insert(10, 10);
+    println!("second insert ---------------------");
+    art.insert(20, 120);
+    println!("third insert ---------------------");
+    art.insert(30, 240);
+    println!("forth insert ---------------------");
+    art.insert(40, 480);
+    println!("fith insert ---------------------");
+    art.insert(50, 960);
+    println!("six insert ---------------------");
+    art.insert(300, 1920);
+    art.delete(300);
+    println!("seventh insert ---------------------");
+    art.insert(301, 3840);
+    println!("first find ---------------------");
+    println!("{}", art.find(10).unwrap());
+    println!("second find ---------------------");
+    println!("{}", art.find(20).unwrap());
+    println!("third find ---------------------");
+    println!("{}", art.find(30).unwrap());
+    println!("fourth find ---------------------");
+    println!("{}", art.find(40).unwrap());
+    println!("fifth find ---------------------");
+    println!("{}", art.find(50).unwrap());
+    println!("seventh find ---------------------");
+    println!("{}", art.find(301).unwrap());
 }

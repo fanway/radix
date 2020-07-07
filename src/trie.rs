@@ -1,18 +1,18 @@
+use std::cmp::Eq;
 use std::collections::HashMap;
 use std::default::Default;
-use std::cmp::Eq;
 use std::hash::Hash;
 
 pub struct TrieNode<T> {
     next: HashMap<T, TrieNode<T>>,
-    end: bool
+    end: bool,
 }
 
 impl<T: Default + Eq + Hash + Clone> TrieNode<T> {
     pub fn new() -> Self {
         Self {
             next: HashMap::new(),
-            end: false
+            end: false,
         }
     }
 
@@ -31,7 +31,7 @@ impl<T: Default + Eq + Hash + Clone> TrieNode<T> {
         for c in s {
             match n.next.get(&c) {
                 Some(node) => n = node,
-                None => return false
+                None => return false,
             }
         }
         n.end
