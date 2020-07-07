@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use std::ptr;
 
 #[cfg(target_arch = "x86")]
@@ -48,6 +49,25 @@ trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
         parent_node: &mut *mut *mut Node<T>,
     ) -> bool;
 }
+
+pub trait ArtKey {
+    fn bytes(&self) -> Vec<u8>;
+}
+
+impl ArtKey for String {
+    fn bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+}
+
+macro_rules! doit {
+    ($($t:ty)*) => ($(impl ArtKey for $t {
+        fn bytes(&self) -> Vec<u8> {
+            self.to_be_bytes().to_vec()
+        }
+    })*)
+}
+doit! { i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize }
 
 #[derive(Debug)]
 enum Node<T> {
@@ -118,10 +138,6 @@ impl<T> std::fmt::Debug for Node256<T> {
 struct LeafNode<T> {
     key: Vec<u8>,
     value: T,
-}
-
-fn transform(value: u32) -> [u8; 4] {
-    value.to_be_bytes()
 }
 
 impl<T> Node4<T> {
@@ -632,19 +648,25 @@ fn common_prefix(key: &[u8], partial: &[u8]) -> usize {
         .count()
 }
 
-pub struct Art<T> {
+pub struct Art<K, T> {
     root: *mut Node<T>,
+    key: PhantomData<K>,
 }
 
-impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
+impl<K, T> Art<K, T>
+where
+    K: ArtKey + std::marker::Sized + std::fmt::Debug,
+    T: 'static + Clone + std::fmt::Debug,
+{
     pub fn new() -> Self {
         Self {
             root: std::ptr::null_mut(),
+            key: PhantomData,
         }
     }
 
-    pub fn delete(&mut self, key: u32) {
-        let key_bytes = key.to_be_bytes();
+    pub fn delete(&mut self, key: K) {
+        let key_bytes = key.bytes();
         let mut ref_node = &mut self.root as *mut *mut Node<T>;
         let mut parent_node = self.root;
         let mut iter_node = self.root;
@@ -681,14 +703,14 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
         }
     }
 
-    pub fn find(&self, key: u32) -> Option<&T> {
+    pub fn find(&self, key: K) -> Option<&T> {
         let mut iter_node = self.root;
-        let key_bytes = key.to_be_bytes();
+        let key_bytes = key.bytes();
         let mut depth = 0;
         println!("----------------------------");
         while !iter_node.is_null() {
             unsafe {
-                println!("iter_node: {:?}, {:?}", *iter_node, key.to_be_bytes());
+                println!("iter_node: {:?}, {:?}", *iter_node, key.bytes());
             }
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
@@ -712,8 +734,8 @@ impl<T: 'static + Clone + std::fmt::Debug> Art<T> {
         None
     }
 
-    pub fn insert(&mut self, key: u32, value: T) {
-        let key_bytes = key.to_be_bytes();
+    pub fn insert(&mut self, key: K, value: T) {
+        let key_bytes = key.bytes();
         if self.root.is_null() {
             self.root = Box::into_raw(Box::new(Node::Leaf(LeafNode::new(value, &key_bytes))));
             return;

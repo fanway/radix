@@ -4,7 +4,7 @@ mod radix;
 mod trie;
 
 fn main() {
-    let mut art = art::Art::<u32>::new();
+    let mut art = art::Art::<u32, u32>::new();
     println!("first insert ---------------------");
     art.insert(10, 10);
     println!("second insert ---------------------");
