@@ -790,10 +790,11 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand::Rng;
 
     #[test]
     fn test_add_and_find() {
-        let mut art = Art::<u32>::new();
+        let mut art = Art::<u32, u32>::new();
         let mut data = std::collections::HashMap::new();
         let mut rng = rand::thread_rng();
 
