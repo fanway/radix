@@ -810,4 +810,23 @@ mod test {
             assert_eq!(val, art.find(key.clone()).unwrap());
         }
     }
+
+    #[test]
+    fn test_add_and_delete() {
+        let mut art = Art::<u32, u32>::new();
+        let mut data = std::collections::HashMap::new();
+        let mut rng = rand::thread_rng();
+
+        for _i in 0..100_000 {
+            data.insert(rng.gen::<u32>(), rng.gen::<u32>());
+        }
+
+        for (key, val) in &data {
+            art.insert(key.clone(), val.clone());
+        }
+
+        for (key, val) in &data {
+            art.delete(key.clone());
+        }
+    }
 }
