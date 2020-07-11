@@ -1,11 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-use std::ops::{Index,IndexMut};
-=======
 use rand::Rng;
->>>>>>> Stashed changes
-=======
->>>>>>> unsafe_art
 use std::collections::VecDeque;
 use std::ops::{Index, IndexMut};
 
