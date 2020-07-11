@@ -694,7 +694,7 @@ where
                                 Node::Leaf(_) => (),
                             }
                             ptr::drop_in_place(iter_node);
-                            *ref_node = ptr::null_mut();
+                            iter_node = ptr::null_mut();
                         }
                     }
                     break;
