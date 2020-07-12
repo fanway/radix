@@ -13,6 +13,7 @@ trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn prefix(&self, key: &[u8]) -> usize;
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
+    fn child_pointers(&self) -> &[*mut Node<T>];
     fn split_check(
         &mut self,
         key_bytes: &[u8],
@@ -196,6 +197,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
     fn info_mut(&mut self) -> &mut Info {
         &mut self.info
     }
+    fn child_pointers(&self) -> &[*mut Node<T>] {
+        &self.child_pointers
+    }
     fn prefix(&self, key: &[u8]) -> usize {
         common_prefix(&self.info.partial[..self.info.partial_len], &key)
     }
@@ -361,6 +365,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
     fn info_mut(&mut self) -> &mut Info {
         &mut self.info
     }
+    fn child_pointers(&self) -> &[*mut Node<T>] {
+        &self.child_pointers
+    }
     fn prefix(&self, key: &[u8]) -> usize {
         common_prefix(&self.info.partial[..self.info.partial_len], &key)
     }
@@ -484,6 +491,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
     fn info_mut(&mut self) -> &mut Info {
         &mut self.info
     }
+    fn child_pointers(&self) -> &[*mut Node<T>] {
+        &self.child_pointers
+    }
     fn insert(
         &mut self,
         key_bytes: &[u8],
@@ -584,6 +594,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
     }
     fn info_mut(&mut self) -> &mut Info {
         &mut self.info
+    }
+    fn child_pointers(&self) -> &[*mut Node<T>] {
+        &self.child_pointers
     }
     fn prefix(&self, key: &[u8]) -> usize {
         common_prefix(&self.info.partial[..self.info.partial_len], &key)
