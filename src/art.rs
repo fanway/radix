@@ -1,4 +1,5 @@
 use core::marker::PhantomData;
+use std::collections::VecDeque;
 use std::ptr;
 
 #[cfg(target_arch = "x86")]
@@ -9,7 +10,12 @@ use std::arch::x86_64::*;
 trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
     fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>>;
-    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, key: u8);
+    fn delete_child(
+        &mut self,
+        parent_node: *mut *mut Node<T>,
+        ref_node: *mut *mut Node<T>,
+        key: u8,
+    );
     fn prefix(&self, key: &[u8]) -> usize;
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
@@ -245,9 +251,14 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         }
         cont
     }
-    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, _key: u8) {
+    fn delete_child(
+        &mut self,
+        parent_node: *mut *mut Node<T>,
+        ref_node: *mut *mut Node<T>,
+        key: u8,
+    ) {
         unsafe {
-            let position = parent_node.offset_from((&self.child_pointers).as_ptr());
+            let position = ref_node.offset_from((&self.child_pointers).as_ptr());
             ptr::copy(
                 (&self.key).as_ptr().offset(position + 1),
                 (&mut self.key).as_mut_ptr().offset(position),
@@ -280,15 +291,17 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
                             sub_prefix,
                         );
                         prefix += sub_prefix;
-                        ptr::copy_nonoverlapping(
-                            (&info.partial).as_ptr(),
-                            (&mut self.info.partial).as_mut_ptr(),
-                            std::cmp::min(prefix, MAX_PREFIX_LEN),
-                        );
-                        info.partial_len += prefix + 1;
                     }
-                    *parent_node = node;
+                    ptr::copy_nonoverlapping(
+                        (&self.info.partial).as_ptr(),
+                        (&mut info.partial).as_mut_ptr(),
+                        std::cmp::min(prefix, MAX_PREFIX_LEN),
+                    );
+                    info.partial_len += self.info.partial_len + 1;
                 }
+            }
+            unsafe {
+                *parent_node = node;
             }
         }
     }
@@ -339,7 +352,6 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
             }
             self.key[i] = key[depth];
             self.child_pointers[i] = node;
-            println!("{}, {}, {:?}", i, key[depth], self.key);
             self.info.count += 1;
         }
     }
@@ -411,9 +423,14 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         }
         cont
     }
-    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, _key: u8) {
+    fn delete_child(
+        &mut self,
+        parent_node: *mut *mut Node<T>,
+        ref_node: *mut *mut Node<T>,
+        key: u8,
+    ) {
         unsafe {
-            let position = parent_node.offset_from((&self.child_pointers).as_ptr());
+            let position = ref_node.offset_from((&self.child_pointers).as_ptr());
             ptr::copy(
                 (&self.key).as_ptr().offset(position + 1),
                 (&mut self.key).as_mut_ptr().offset(position),
@@ -531,7 +548,12 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         }
         cont
     }
-    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, key: u8) {
+    fn delete_child(
+        &mut self,
+        parent_node: *mut *mut Node<T>,
+        ref_node: *mut *mut Node<T>,
+        key: u8,
+    ) {
         let mut position = self.key[key as usize];
         self.key[key as usize] = 48;
         self.child_pointers[position as usize] = ptr::null_mut();
@@ -624,7 +646,12 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
         }
         cont
     }
-    fn delete_child(&mut self, parent_node: *mut *mut Node<T>, key: u8) {
+    fn delete_child(
+        &mut self,
+        parent_node: *mut *mut Node<T>,
+        ref_node: *mut *mut Node<T>,
+        key: u8,
+    ) {
         self.child_pointers[key as usize] = ptr::null_mut();
         self.info.count -= 1;
 
@@ -706,18 +733,21 @@ where
     pub fn delete(&mut self, key: K) {
         let key_bytes = key.bytes();
         let mut ref_node = &mut self.root as *mut *mut Node<T>;
-        let mut parent_node = self.root;
+        let mut parent_node = &mut self.root as *mut *mut Node<T>;
         let mut iter_node = self.root;
         let mut depth = 0;
         let mut key = 0;
         while !iter_node.is_null() {
+            unsafe {
+                println!("iter_node: {:?}, {:?}", *iter_node, key_bytes);
+            }
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
                     depth += node.prefix(&key_bytes[depth..]);
                     if let Some(n) = node.find_child(key_bytes[depth]) {
                         key = key_bytes[depth];
+                        parent_node = ref_node;
                         ref_node = n;
-                        parent_node = iter_node;
                         iter_node = *n;
                     } else {
                         break;
@@ -727,9 +757,13 @@ where
                     depth += common_prefix(&node.key[depth..], &key_bytes[depth..]);
                     if depth == node.key.len() {
                         unsafe {
-                            match &mut *parent_node {
-                                Node::ArtNode(node) => node.delete_child(ref_node, key),
-                                Node::Leaf(_) => (),
+                            match &mut **parent_node {
+                                Node::ArtNode(node) => {
+                                    node.delete_child(parent_node, ref_node, key);
+                                }
+                                Node::Leaf(_) => {
+                                    *ref_node = ptr::null_mut();
+                                }
                             }
                             ptr::drop_in_place(iter_node);
                             iter_node = ptr::null_mut();
@@ -748,7 +782,7 @@ where
         println!("----------------------------");
         while !iter_node.is_null() {
             unsafe {
-                println!("iter_node: {:?}, {:?}", *iter_node, key.bytes());
+                //println!("iter_node: {:?}, {:?}", *iter_node, key.bytes());
             }
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
@@ -866,5 +900,6 @@ mod test {
         for (key, val) in &data {
             art.delete(key.clone());
         }
+        assert_eq!(0, art.bfs_count());
     }
 }
