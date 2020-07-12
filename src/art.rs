@@ -665,6 +665,31 @@ where
         }
     }
 
+    pub fn bfs_count(&self) -> usize {
+        let mut count = 0;
+        if self.root.is_null() {
+            return count;
+        }
+        let mut queue = VecDeque::new();
+        queue.push_back(self.root);
+        while !queue.is_empty() {
+            let node = queue.pop_front().unwrap();
+            match unsafe { &*node } {
+                Node::ArtNode(n) => {
+                    let pointers = n.child_pointers();
+                    let info = n.info();
+                    for i in 0..info.count {
+                        queue.push_back(pointers[i]);
+                    }
+                }
+                Node::Leaf(n) => {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
     pub fn delete(&mut self, key: K) {
         let key_bytes = key.bytes();
         let mut ref_node = &mut self.root as *mut *mut Node<T>;
