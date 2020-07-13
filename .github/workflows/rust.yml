@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  job1:
+  build-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,7 +20,7 @@ jobs:
       run: cargo +nightly build --verbose
     - name: Run tests
       run: cargo +nightly test --verbose
-  job2:
+  build-windows:
     runs-on: windows-latest
 
     steps:
