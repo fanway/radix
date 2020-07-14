@@ -1,4 +1,3 @@
-use rand::Rng;
 use std::collections::VecDeque;
 use std::ops::{Index, IndexMut};
 
@@ -317,6 +316,7 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand::Rng;
 
     #[test]
     fn test_add_and_find() {

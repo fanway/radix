@@ -255,7 +255,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         &mut self,
         parent_node: *mut *mut Node<T>,
         ref_node: *mut *mut Node<T>,
-        key: u8,
+        _key: u8,
     ) {
         unsafe {
             let position = ref_node.offset_from((&self.child_pointers).as_ptr());
@@ -427,7 +427,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         &mut self,
         parent_node: *mut *mut Node<T>,
         ref_node: *mut *mut Node<T>,
-        key: u8,
+        _key: u8,
     ) {
         unsafe {
             let position = ref_node.offset_from((&self.child_pointers).as_ptr());
@@ -551,7 +551,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
     fn delete_child(
         &mut self,
         parent_node: *mut *mut Node<T>,
-        ref_node: *mut *mut Node<T>,
+        _ref_node: *mut *mut Node<T>,
         key: u8,
     ) {
         let mut position = self.key[key as usize];
@@ -649,7 +649,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
     fn delete_child(
         &mut self,
         parent_node: *mut *mut Node<T>,
-        ref_node: *mut *mut Node<T>,
+        _ref_node: *mut *mut Node<T>,
         key: u8,
     ) {
         self.child_pointers[key as usize] = ptr::null_mut();
@@ -722,7 +722,7 @@ where
                         queue.push_back(pointers[i]);
                     }
                 }
-                Node::Leaf(n) => {
+                Node::Leaf(_) => {
                     count += 1;
                 }
             }
@@ -766,7 +766,6 @@ where
                                 }
                             }
                             ptr::drop_in_place(iter_node);
-                            iter_node = ptr::null_mut();
                         }
                     }
                     break;
@@ -779,10 +778,9 @@ where
         let mut iter_node = self.root;
         let key_bytes = key.bytes();
         let mut depth = 0;
-        println!("----------------------------");
         while !iter_node.is_null() {
             unsafe {
-                //println!("iter_node: {:?}, {:?}", *iter_node, key.bytes());
+                println!("iter_node: {:?}, {:?}", *iter_node, key.bytes());
             }
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
