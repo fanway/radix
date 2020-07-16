@@ -712,6 +712,7 @@ where
             let node = queue.pop_front().unwrap();
             match unsafe { &*node } {
                 Node::ArtNode(n) => {
+                    count += 1;
                     let pointers = n.child_pointers();
                     let info = n.info();
                     for i in 0..info.count {
@@ -740,6 +741,9 @@ where
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
                     depth += node.prefix(&key_bytes[depth..]);
+                    if depth == key_bytes.len() {
+                        depth -= 1;
+                    }
                     if let Some(n) = node.find_child(key_bytes[depth]) {
                         key = key_bytes[depth];
                         parent_node = ref_node;
@@ -781,6 +785,9 @@ where
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
                     depth += node.prefix(&key_bytes[depth..]);
+                    if depth == key_bytes.len() {
+                        depth -= 1;
+                    }
                     if let Some(n) = node.find_child(key_bytes[depth]) {
                         iter_node = *n;
                     } else {
