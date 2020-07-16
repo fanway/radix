@@ -242,7 +242,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
                         self.info.count,
                     );
                     new_node.add(new_leaf, &key_bytes, *depth);
-                    ptr::drop_in_place(*iter_node);
+                    Box::from_raw(*iter_node);
                     **parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
                 }
             }
@@ -413,7 +413,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
                         new_node.key[self.key[i] as usize] = i as u8;
                     }
                     new_node.add(new_leaf, &key_bytes, *depth);
-                    ptr::drop_in_place(*iter_node);
+                    Box::from_raw(*iter_node);
                     **parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
                 }
             }
@@ -537,7 +537,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
                 }
                 new_node.add(new_leaf, &key_bytes, *depth);
                 unsafe {
-                    ptr::drop_in_place(*iter_node);
+                    Box::from_raw(*iter_node);
                     **parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
                 }
             }
@@ -761,7 +761,7 @@ where
                                     *ref_node = ptr::null_mut();
                                 }
                             }
-                            ptr::drop_in_place(iter_node);
+                            Box::from_raw(iter_node);
                         }
                     }
                     break;
