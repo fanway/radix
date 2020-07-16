@@ -300,6 +300,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
                 }
             }
             unsafe {
+                Box::from_raw(*parent_node);
                 *parent_node = node;
             }
         }
@@ -450,6 +451,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
                     (&mut new_node.child_pointers).as_mut_ptr(),
                     4,
                 );
+                Box::from_raw(*parent_node);
                 *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
             }
         }
@@ -568,6 +570,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
                 }
             }
             unsafe {
+                Box::from_raw(*parent_node);
                 *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
             }
         }
@@ -662,6 +665,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
                 }
             }
             unsafe {
+                Box::from_raw(*parent_node);
                 *parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
             }
         }
