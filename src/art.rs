@@ -218,8 +218,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         mut parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
         let mut cont = true;
-        let (splitted, n) =
-            self.split_check(key_bytes, depth, &mut iter_node, new_leaf, &mut parent_node);
+        let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
         if !splitted {
             return splitted;
         }
@@ -392,8 +391,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         mut parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
         let mut cont = true;
-        let (splitted, n) =
-            self.split_check(key_bytes, depth, &mut iter_node, new_leaf, &mut parent_node);
+        let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
         if !splitted {
             return splitted;
         }
@@ -520,8 +518,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         mut parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
         let mut cont = true;
-        let (splitted, n) =
-            self.split_check(key_bytes, depth, &mut iter_node, new_leaf, &mut parent_node);
+        let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
         if !splitted {
             return splitted;
         }
@@ -632,8 +629,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
         mut parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
         let mut cont = true;
-        let (splitted, n) =
-            self.split_check(key_bytes, depth, &mut iter_node, new_leaf, &mut parent_node);
+        let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
         if !splitted {
             return splitted;
         }
