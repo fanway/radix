@@ -773,9 +773,34 @@ fn common_prefix(key: &[u8], partial: &[u8]) -> usize {
         .count()
 }
 
-pub struct Art<K, T> {
+pub struct Art<K, T: 'static + std::fmt::Debug> {
     root: *mut Node<T>,
     key: PhantomData<K>,
+}
+
+// Free all tree recursive
+fn free_tree<T: 'static + std::fmt::Debug>(node: *mut Node<T>) {
+    if node.is_null() {
+        return;
+    }
+    match unsafe { &*node } {
+        Node::ArtNode(n) => {
+            let child_pointers = n.child_pointers();
+            for ptr in child_pointers.iter() {
+                free_tree(*ptr);
+            }
+        }
+        _ => (),
+    }
+    unsafe {
+        Box::from_raw(node);
+    }
+}
+
+impl<K, T: 'static + std::fmt::Debug> Drop for Art<K, T> {
+    fn drop(&mut self) {
+        free_tree::<T>(self.root)
+    }
 }
 
 impl<K, T> Art<K, T>
