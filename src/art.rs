@@ -20,6 +20,8 @@ trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn info(&self) -> &Info;
     fn info_mut(&mut self) -> &mut Info;
     fn child_pointers(&self) -> &[*mut Node<T>];
+    // Check if we need to split the node, when we have an equal partial prefixes
+    // and performs one if needed
     fn split_check(
         &mut self,
         key_bytes: &[u8],
@@ -28,24 +30,29 @@ trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
         new_leaf: *mut Node<T>,
         parent_node: &mut *mut *mut Node<T>,
     ) -> (bool, Option<&mut *mut Node<T>>) {
+        // Number of matched bytes with the current node partial
         let cm = self.prefix(&key_bytes[*depth..]);
         let info = self.info_mut();
         if cm != info.partial_len {
+            // Create a new node with the splitted partial to the matter of prefix
             let mut new_node = Node4::new(&info.partial[..cm]);
+            // Add a new leaf and the current node as a childs
             new_node.add(new_leaf, &key_bytes, *depth + cm);
             new_node.add(*iter_node, &info.partial, cm);
             info.partial_len -= cm;
-            //info.partial.copy_within(0..info.partial_len, cm);
+            // Split the partial to the matter of suffix
             for i in 0..info.partial_len {
                 info.partial[i] = info.partial[cm + i];
             }
             unsafe {
+                // Write to the place of the current node the new one
                 **parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
             }
-            return (false, None);
+            return (true, None);
         }
+        // If a split is not needed find next child
         *depth += info.partial_len;
-        (true, self.find_child(key_bytes[*depth]))
+        (false, self.find_child(key_bytes[*depth]))
     }
     fn insert(
         &mut self,
@@ -57,6 +64,7 @@ trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     ) -> bool;
 }
 
+// Trait to have a byte representation of the accepted key types
 pub trait ArtKey {
     fn bytes(&self) -> Vec<u8>;
 }
@@ -67,6 +75,9 @@ impl ArtKey for String {
     }
 }
 
+// Because rust doesn't have the size_of of a generic types
+// we can't return a generic sized array
+// For that purpose we use this macro to generate needed code
 macro_rules! doit {
     ($($t:ty)*) => ($(impl ArtKey for $t {
         fn bytes(&self) -> Vec<u8> {
@@ -76,22 +87,31 @@ macro_rules! doit {
 }
 doit! { i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize }
 
+// Enum that represents 2 type of nodes
 #[derive(Debug)]
 enum Node<T> {
     ArtNode(Box<dyn ArtNode<T>>),
     Leaf(LeafNode<T>),
 }
 
+// Constant that was introduced in the paper to divide long keys
+// into chuncks
 const MAX_PREFIX_LEN: usize = 10;
 
+// Struct that contains useful information shared between nodes
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct Info {
+    // Number of childs in the node
     count: usize,
+    // Partial prefix
     partial: [u8; MAX_PREFIX_LEN],
+    // Length of the partial prefix
     partial_len: usize,
 }
 
+// Node with 4 childs with one to one
+// child pointers and keys
 #[repr(C)]
 #[derive(Debug)]
 struct Node4<T> {
@@ -100,6 +120,8 @@ struct Node4<T> {
     key: [u8; 4],
 }
 
+// Node with 16 childs with one to one
+// child pointers and keys
 #[repr(C)]
 #[derive(Debug)]
 struct Node16<T> {
@@ -108,13 +130,17 @@ struct Node16<T> {
     key: [u8; 16],
 }
 
+// Node with 48 childs
 #[repr(C)]
 struct Node48<T> {
     child_pointers: [*mut Node<T>; 48],
+    // Key is used as a map of bytes
+    // key[byte as usize] -> gives on of the 48 pointers
     key: [u8; 256],
     info: Info,
 }
 
+// std::fmt::Debug is not implemented for arrays with size >= 32
 impl<T> std::fmt::Debug for Node48<T> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("Node48")
@@ -125,12 +151,15 @@ impl<T> std::fmt::Debug for Node48<T> {
     }
 }
 
+// Node with 256 child, where child_pointers array
+// used like a key map
 #[repr(C)]
 struct Node256<T> {
     child_pointers: [*mut Node<T>; 256],
     info: Info,
 }
 
+// std::fmt::Debug is not implemented for arrays with size >= 32
 impl<T> std::fmt::Debug for Node256<T> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("Node256")
@@ -140,6 +169,7 @@ impl<T> std::fmt::Debug for Node256<T> {
     }
 }
 
+// A leaf node which contains a value and a full key
 #[repr(C)]
 #[derive(Debug)]
 struct LeafNode<T> {
@@ -147,6 +177,7 @@ struct LeafNode<T> {
     value: T,
 }
 
+// Implementation of `Node4`
 impl<T> Node4<T> {
     fn new(prefix: &[u8]) -> Self {
         let min = std::cmp::min(MAX_PREFIX_LEN, prefix.len());
@@ -163,6 +194,7 @@ impl<T> Node4<T> {
         }
     }
 
+    // New with a copied info header
     fn new_with_info(info: Info) -> Self {
         Self {
             child_pointers: [std::ptr::null_mut(); 4],
@@ -172,6 +204,7 @@ impl<T> Node4<T> {
     }
 }
 
+// Implementation of `ArtNode` trait for `Node4`
 impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
         let mut i: usize = 0;
@@ -181,6 +214,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
             }
             i += 1;
         }
+        // Shift all childs if needed to create space for a new one
         if i != 3 && self.info.count != 0 {
             self.key.copy_within(i..self.info.count, i + 1);
             self.child_pointers.copy_within(i..self.info.count, i + 1);
@@ -213,14 +247,16 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         &mut self,
         key_bytes: &[u8],
         depth: &mut usize,
-        mut iter_node: &mut *mut Node<T>,
+        iter_node: &mut *mut Node<T>,
         new_leaf: *mut Node<T>,
-        mut parent_node: &mut *mut *mut Node<T>,
+        parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
+        // Condition to continue loop or not
         let mut cont = true;
+        // Check for a split and perform split if needed
         let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
-        if !splitted {
-            return splitted;
+        if splitted {
+            return !splitted;
         }
         if let Some(node) = n {
             *parent_node = node;
@@ -229,19 +265,23 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
             if self.info.count < 4 {
                 self.add(new_leaf, &key_bytes, *depth);
             } else {
+                // If we don't have space to insert a new node => expand
                 unsafe {
                     let mut new_node = Node16::new_with_info(self.info);
+                    // memcpy
                     ptr::copy_nonoverlapping(
                         (&self.key).as_ptr(),
                         (&mut new_node.key).as_mut_ptr(),
                         self.info.count,
                     );
+                    // memcpy
                     ptr::copy_nonoverlapping(
                         (&self.child_pointers).as_ptr(),
                         (&mut new_node.child_pointers).as_mut_ptr(),
                         self.info.count,
                     );
                     new_node.add(new_leaf, &key_bytes, *depth);
+                    // Free memory for the current node
                     Box::from_raw(*iter_node);
                     **parent_node = Box::into_raw(Box::new(Node::ArtNode(Box::new(new_node))));
                 }
@@ -257,12 +297,15 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         _key: u8,
     ) {
         unsafe {
+            // Calculating offset in the `child_pointers` to basicly get an index
             let position = ref_node.offset_from((&self.child_pointers).as_ptr());
+            // memmove
             ptr::copy(
                 (&self.key).as_ptr().offset(position + 1),
                 (&mut self.key).as_mut_ptr().offset(position),
                 self.info.count - 1 - position as usize,
             );
+            // memmove
             ptr::copy(
                 (&self.child_pointers).as_ptr().offset(position + 1),
                 (&mut self.child_pointers).as_mut_ptr().offset(position),
@@ -270,18 +313,24 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
             );
         }
         self.info.count -= 1;
+        // If number of childs is equal 1, we want to concat
+        // parent and child node together and free the memory
         if self.info.count == 1 {
             let node = self.child_pointers[0];
             if let Node::ArtNode(n) = unsafe { &mut *node } {
                 let mut prefix: usize = self.info.partial_len;
                 if prefix < MAX_PREFIX_LEN {
+                    // Place key-byte to the end of the partial
+                    // to later copy it to a leaf
                     self.info.partial[prefix] = self.key[0];
                     prefix += 1;
                 }
                 let info = n.info_mut();
                 unsafe {
                     if prefix < MAX_PREFIX_LEN {
+                        // Calculate the remaining prefix
                         let sub_prefix = std::cmp::min(info.partial_len, MAX_PREFIX_LEN - prefix);
+                        // Memcpy the remaining prefix to concat it
                         ptr::copy_nonoverlapping(
                             (&info.partial).as_ptr(),
                             (&mut self.info.partial)
@@ -291,15 +340,19 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
                         );
                         prefix += sub_prefix;
                     }
+                    // Memcpy whole partial prefix
                     ptr::copy_nonoverlapping(
                         (&self.info.partial).as_ptr(),
                         (&mut info.partial).as_mut_ptr(),
                         std::cmp::min(prefix, MAX_PREFIX_LEN),
                     );
+                    // Because we added key-byte to the end of partial
+                    // we have to add 1
                     info.partial_len += self.info.partial_len + 1;
                 }
             }
             unsafe {
+                // Free the memory
                 Box::from_raw(*parent_node);
                 *parent_node = node;
             }
@@ -334,22 +387,32 @@ impl<T> Node16<T> {
 
 impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
+        // Create a mask with length equal to number
+        // of `child_pointers`
         let mask = (1 << self.info.count) - 1;
         unsafe {
+            // Compare less than with searched byte
+            // for 16 bytes at once
             let cmp = _mm_cmplt_epi8(
                 _mm_set1_epi8(key[depth] as i8),
                 _mm_loadu_si128((&self.key).as_ptr() as *const __m128i),
             );
 
+            // Apply the mask
             let bitfield = _mm_movemask_epi8(cmp) & mask;
             let i: usize;
             if bitfield > 0 {
+                // Trailing zeros represents index
                 i = bitfield.trailing_zeros() as usize;
+                // Safe memmove (Maybe should make it unsafe to
+                // avoid unnecessary bound check
                 self.key.copy_within(i..self.info.count, i + 1);
                 self.child_pointers.copy_within(i..self.info.count, i + 1);
             } else {
+                // If all elements is less than the key, insert to the end
                 i = self.info.count;
             }
+            // Insert the new node
             self.key[i] = key[depth];
             self.child_pointers[i] = node;
             self.info.count += 1;
@@ -358,13 +421,17 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
     fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>> {
         let mask = (1 << self.info.count) - 1;
         unsafe {
+            // Compare less than with searched byte
+            // for 16 bytes at once
             let cmp = _mm_cmpeq_epi8(
                 _mm_set1_epi8(key as i8),
                 _mm_loadu_si128((&self.key).as_ptr() as *const __m128i),
             );
 
+            // Apply the mask
             let bitfield = _mm_movemask_epi8(cmp) & mask;
             if bitfield != 0 {
+                // Return index
                 let i = bitfield.trailing_zeros() as usize;
                 return Some(&mut self.child_pointers[i]);
             }
@@ -387,14 +454,16 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         &mut self,
         key_bytes: &[u8],
         depth: &mut usize,
-        mut iter_node: &mut *mut Node<T>,
+        iter_node: &mut *mut Node<T>,
         new_leaf: *mut Node<T>,
-        mut parent_node: &mut *mut *mut Node<T>,
+        parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
+        // Condition to continue loop or not
         let mut cont = true;
+        // Check for a split and perform split if needed
         let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
-        if !splitted {
-            return splitted;
+        if splitted {
+            return !splitted;
         }
         if let Some(node) = n {
             *parent_node = node;
@@ -404,7 +473,9 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
                 self.add(new_leaf, &key_bytes, *depth);
             } else {
                 unsafe {
+                    // If we don't have space to insert a new node => expand
                     let mut new_node = Node48::new_with_info(self.info);
+                    // Memcpy
                     ptr::copy_nonoverlapping(
                         (&self.child_pointers).as_ptr(),
                         (&mut new_node.child_pointers).as_mut_ptr(),
@@ -429,6 +500,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
         _key: u8,
     ) {
         unsafe {
+            // Calculating offset in the `child_pointers` to basicly get an index
             let position = ref_node.offset_from((&self.child_pointers).as_ptr());
             ptr::copy(
                 (&self.key).as_ptr().offset(position + 1),
@@ -442,6 +514,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
             );
         }
         self.info.count -= 1;
+        // If count == 3 we want to shrink `Node16` to `Node4`
         if self.info.count == 3 {
             let mut new_node = Node4::new_with_info(self.info);
             unsafe {
@@ -486,6 +559,7 @@ impl<T> Node48<T> {
 impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize) {
         let mut i = 0;
+        // Add to a free place
         while !self.child_pointers[i].is_null() {
             i += 1;
         }
@@ -515,14 +589,16 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         &mut self,
         key_bytes: &[u8],
         depth: &mut usize,
-        mut iter_node: &mut *mut Node<T>,
+        iter_node: &mut *mut Node<T>,
         new_leaf: *mut Node<T>,
-        mut parent_node: &mut *mut *mut Node<T>,
+        parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
+        // Condition to continue loop or not
         let mut cont = true;
+        // Check for a split and perform split if needed
         let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
-        if !splitted {
-            return splitted;
+        if splitted {
+            return !splitted;
         }
         if let Some(node) = n {
             *parent_node = node;
@@ -531,6 +607,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
             if self.info.count < 48 {
                 self.add(new_leaf, &key_bytes, *depth);
             } else {
+                // If we don't have space to insert a new node => expand
                 let mut new_node = Node256::new_with_info(self.info);
                 for i in 0..256 {
                     if self.key[i] != 48 {
@@ -553,11 +630,13 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         _ref_node: *mut *mut Node<T>,
         key: u8,
     ) {
+        // Delete child
         let mut position = self.key[key as usize];
         self.key[key as usize] = 48;
         self.child_pointers[position as usize] = ptr::null_mut();
         self.info.count -= 1;
 
+        // If count == 12 we want to shrink `Node48` to `Node16`
         if self.info.count == 12 {
             let mut new_node = Node16::new_with_info(self.info);
             let mut count = 0;
@@ -627,14 +706,16 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
         &mut self,
         key_bytes: &[u8],
         depth: &mut usize,
-        mut iter_node: &mut *mut Node<T>,
+        iter_node: &mut *mut Node<T>,
         new_leaf: *mut Node<T>,
-        mut parent_node: &mut *mut *mut Node<T>,
+        parent_node: &mut *mut *mut Node<T>,
     ) -> bool {
+        // Condition to continue loop or not
         let mut cont = true;
+        // Check for a split and perform split if needed
         let (splitted, n) = self.split_check(key_bytes, depth, iter_node, new_leaf, parent_node);
-        if !splitted {
-            return splitted;
+        if splitted {
+            return !splitted;
         }
         if let Some(node) = n {
             *parent_node = node;
@@ -651,9 +732,12 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
         _ref_node: *mut *mut Node<T>,
         key: u8,
     ) {
+        // Delete child
         self.child_pointers[key as usize] = ptr::null_mut();
         self.info.count -= 1;
 
+        // If count == 35 we wan't to shrink `Node256` to `Node48`
+        // (35 is chosen because we don't want to reallocate too much)
         if self.info.count == 35 {
             let mut new_node = Node48::new_with_info(self.info);
             let mut position = 0;
@@ -681,6 +765,7 @@ impl<T> LeafNode<T> {
     }
 }
 
+// Calculate a number of equal bytes in two slices
 fn common_prefix(key: &[u8], partial: &[u8]) -> usize {
     key.iter()
         .zip(partial.iter())
@@ -705,6 +790,7 @@ where
         }
     }
 
+    // Count a number of nodes in the tree
     pub fn bfs_count(&self) -> usize {
         let mut count = 0;
         if self.root.is_null() {
@@ -731,6 +817,7 @@ where
         count
     }
 
+    // Delete value from the tree
     pub fn delete(&mut self, key: K) {
         let key_bytes = key.bytes();
         let mut ref_node = &mut self.root as *mut *mut Node<T>;
@@ -745,9 +832,11 @@ where
             match unsafe { &mut *iter_node } {
                 Node::ArtNode(node) => {
                     depth += node.prefix(&key_bytes[depth..]);
+                    // In this case we want last element
                     if depth == key_bytes.len() {
                         depth -= 1;
                     }
+                    // Iterate until we hit a leaf or don't find any child
                     if let Some(n) = node.find_child(key_bytes[depth]) {
                         key = key_bytes[depth];
                         parent_node = ref_node;
@@ -765,6 +854,8 @@ where
                                 Node::ArtNode(node) => {
                                     node.delete_child(parent_node, ref_node, key);
                                 }
+                                // Initial case then parent and child node
+                                // might be leaves at the same time
                                 Node::Leaf(_) => {
                                     *ref_node = ptr::null_mut();
                                 }
@@ -792,6 +883,7 @@ where
                     if depth == key_bytes.len() {
                         depth -= 1;
                     }
+                    // Iterate until we hit a leaf or don't find any child
                     if let Some(n) = node.find_child(key_bytes[depth]) {
                         iter_node = *n;
                     } else {
@@ -837,6 +929,7 @@ where
                         break;
                     }
                 }
+                // Either rewrite or split the node
                 Node::Leaf(node) => {
                     let cm = depth + common_prefix(&node.key[depth..], &key_bytes[depth..]);
                     println!(
@@ -845,11 +938,13 @@ where
                         &key_bytes,
                         &node.key
                     );
+                    // Rewrite value of existing node
                     if key_bytes.len() == cm {
                         println!("{:?}, {:?}, {:?}", value, node.value, key);
                         node.value = value;
                         break;
                     }
+                    // Split node
                     let mut new_node = Node4::new(&key_bytes[depth..cm]);
                     //node.key = node.key.to_vec();
                     new_node.add(new_leaf, &key_bytes, cm);
