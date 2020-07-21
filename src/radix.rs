@@ -251,7 +251,7 @@ impl<T: std::default::Default + std::fmt::Debug + std::clone::Clone> RadixTree<T
     }
 
     pub fn delete(&mut self, key: String) {
-        let (ans, idx, node_idx) = self.lookup(key.clone());
+        let (ans, idx, node_idx) = self.lookup(key);
         if ans.exists {
             let target_node_idx = self.edges[idx].target_node;
             self.edges.delete(idx);

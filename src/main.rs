@@ -13,11 +13,10 @@ fn main() {
     art.insert(30, 240);
     println!("forth insert ---------------------");
     art.insert(40, 480);
-    println!("fith insert ---------------------");
+    println!("fifth insert ---------------------");
     art.insert(50, 960);
     println!("six insert ---------------------");
     art.insert(300, 1920);
-    art.delete(300);
     println!("seventh insert ---------------------");
     art.insert(301, 3840);
     println!("first find ---------------------");
@@ -32,4 +31,11 @@ fn main() {
     println!("{}", art.find(50).unwrap());
     println!("seventh find ---------------------");
     println!("{}", art.find(301).unwrap());
+    art.delete(10);
+    art.delete(20);
+    art.delete(30);
+    art.delete(40);
+    art.delete(50);
+    art.delete(300);
+    art.delete(301);
 }

@@ -22,7 +22,7 @@ impl<T: Default + Eq + Hash + Clone> TrieNode<T> {
             if n.end {
                 break;
             }
-            n = n.next.entry(c).or_insert(TrieNode::new());
+            n = n.next.entry(c).or_insert_with(TrieNode::new);
         }
         n.end = true;
     }

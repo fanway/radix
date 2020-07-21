@@ -9,7 +9,7 @@ use std::arch::x86_64::*;
 
 trait ArtNode<T: 'static + std::fmt::Debug>: std::fmt::Debug {
     fn add(&mut self, node: *mut Node<T>, key: &[u8], depth: usize);
-    fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>>;
+    fn find_child(&mut self, key: u8) -> Option<&mut *mut Node<T>>;
     fn delete_child(
         &mut self,
         parent_node: *mut *mut Node<T>,
@@ -223,7 +223,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
         self.key[i] = key[depth];
         self.child_pointers[i] = node;
     }
-    fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>> {
+    fn find_child(&mut self, key: u8) -> Option<&mut *mut Node<T>> {
         for i in 0..self.info.count as usize {
             if key == self.key[i] {
                 return Some(&mut self.child_pointers[i]);
@@ -333,9 +333,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node4<T> {
                         // Memcpy the remaining prefix to concat it
                         ptr::copy_nonoverlapping(
                             (&info.partial).as_ptr(),
-                            (&mut self.info.partial)
-                                .as_mut_ptr()
-                                .offset(prefix as isize),
+                            (&mut self.info.partial).as_mut_ptr().add(prefix),
                             sub_prefix,
                         );
                         prefix += sub_prefix;
@@ -418,7 +416,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node16<T> {
             self.info.count += 1;
         }
     }
-    fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>> {
+    fn find_child(&mut self, key: u8) -> Option<&mut *mut Node<T>> {
         let mask = (1 << self.info.count) - 1;
         unsafe {
             // Compare less than with searched byte
@@ -567,7 +565,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node48<T> {
         self.key[key[depth] as usize] = i as u8;
         self.info.count += 1;
     }
-    fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>> {
+    fn find_child(&mut self, key: u8) -> Option<&mut *mut Node<T>> {
         if self.key[key as usize] != 48 {
             return Some(&mut self.child_pointers[self.key[key as usize] as usize]);
         }
@@ -684,7 +682,7 @@ impl<T: 'static + std::fmt::Debug> ArtNode<T> for Node256<T> {
         self.child_pointers[key[depth] as usize] = node;
         self.info.count += 1;
     }
-    fn find_child<'a>(&'a mut self, key: u8) -> Option<&'a mut *mut Node<T>> {
+    fn find_child(&mut self, key: u8) -> Option<&mut *mut Node<T>> {
         if !self.child_pointers[key as usize].is_null() {
             return Some(&mut self.child_pointers[key as usize]);
         }
@@ -783,14 +781,11 @@ fn free_tree<T: 'static + std::fmt::Debug>(node: *mut Node<T>) {
     if node.is_null() {
         return;
     }
-    match unsafe { &*node } {
-        Node::ArtNode(n) => {
-            let child_pointers = n.child_pointers();
-            for ptr in child_pointers.iter() {
-                free_tree(*ptr);
-            }
+    if let Node::ArtNode(n) = unsafe { &*node } {
+        let child_pointers = n.child_pointers();
+        for ptr in child_pointers.iter() {
+            free_tree(*ptr);
         }
-        _ => (),
     }
     unsafe {
         Box::from_raw(node);
